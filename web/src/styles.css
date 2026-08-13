@@ -554,3 +554,9 @@ button { font-family: inherit; }
   .regen-audio-btn { font-size: 12px; padding: 4px 0; }
   .reply-para { gap: 12px; }
 }
+
+/* 信箱状态文字 */
+.row-status { font-size: 11px; color: var(--ink-soft); }
+.row-status.done { color: #6d9b6d; }
+.row-status.replying, .row-status.writing { color: var(--accent); }
+.row-status.error { color: var(--danger); }

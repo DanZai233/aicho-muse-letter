@@ -10,7 +10,23 @@ export default function InboxPage() {
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    api.letters().then(d => setLetters(d.list || [])).catch(e => setErr(e.message)).finally(() => setLoading(false));
+    let timer = null;
+    async function load() {
+      try {
+        const d = await api.letters();
+        setLetters(d.list || []);
+        setErr('');
+        // 有未完成信件则继续轮询，全部完成后停止
+        const pending = (d.list || []).some(l => l.status === 'writing' || l.status === 'replying');
+        if (pending) timer = setTimeout(load, 3000);
+      } catch (e) {
+        setErr(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+    return () => clearTimeout(timer);
   }, []);
 
   async function remove(id, e) {
@@ -67,6 +83,7 @@ export default function InboxPage() {
                 </span>
                 <span className="row-meta">
                   <span className={'status-dot ' + l.status} />
+                  <span className={'row-status ' + l.status}>{STATUS_LABEL[l.status] || ''}</span>
                   <span className="row-time">{fmt(l.created_at)}</span>
                 </span>
                 <button className="row-del" title="删除这封信" onClick={(e) => remove(l.id, e)}>✕</button>
