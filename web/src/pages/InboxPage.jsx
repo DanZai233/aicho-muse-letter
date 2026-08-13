@@ -30,7 +30,10 @@ export default function InboxPage() {
         </div>
       </header>
       <main className="inbox-main">
-        <p className="inbox-desc">写过的信都收在这里，可以反复回看、重新听，也可以分享给朋友。</p>
+        <div className="inbox-head">
+          <p className="inbox-desc">写过的信都收在这里，可以反复回看、重新听，也可以分享给朋友。</p>
+          {letters.length ? <span className="inbox-count">{letters.length} 封信</span> : null}
+        </div>
         {loading ? <p className="empty-hint">正在打开信箱…</p> : null}
         {err ? <p className="form-err">{err}</p> : null}
         {!loading && !err && letters.length === 0 ? (

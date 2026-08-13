@@ -423,3 +423,45 @@ button { font-family: inherit; }
   .row-preview { display: none; }
   .panel-foot { display: none; }
 }
+
+/* 信箱升级 */
+.inbox-head { display: flex; align-items: center; justify-content: space-between; margin: 2px 4px 14px; }
+.inbox-desc { margin: 0; }
+.inbox-count {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600;
+}
+.letter-row {
+  position: relative;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.letter-row::after {
+  content: '';
+  position: absolute; right: 14px; bottom: -1px; left: 14px;
+  border-bottom: 1px dashed var(--line);
+}
+.letter-row:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(90,70,40,.18); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.row-body { padding-left: 2px; }
+.row-title { font-size: 15px; }
+.row-preview { margin-top: 2px; }
+
+/* 详情页信纸质感 */
+.letter-main { display: flex; flex-direction: column; }
+.letter-main .paper-card { position: relative; }
+.letter-main .incoming::before, .letter-main .reply-card::before {
+  content: '';
+  position: absolute; top: 10px; left: 14px; right: 14px;
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+.letter-main .paper-head { padding-top: 8px; }
+.reply-card { margin-top: 30px; }
+.letter-actions {
+  justify-content: center; margin-top: 8px; padding-top: 18px;
+  border-top: 1px dashed var(--line);
+}
+.share-url {
+  background: var(--paper-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; max-width: 100%;
+}
+.reply-para { padding: 10px 0; border-bottom: 1px dotted var(--line); }
+.reply-para:last-child { border-bottom: none; }
