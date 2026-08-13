@@ -465,3 +465,26 @@ button { font-family: inherit; }
 }
 .reply-para { padding: 10px 0; border-bottom: 1px dotted var(--line); }
 .reply-para:last-child { border-bottom: none; }
+
+/* 信纸质感：细微纹理 */
+.paper-card {
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(201,138,94,.05), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(123,141,154,.05), transparent 45%),
+    var(--paper);
+}
+.reply-card {
+  background-image:
+    radial-gradient(circle at 80% 8%, rgba(201,138,94,.07), transparent 42%),
+    radial-gradient(circle at 12% 92%, rgba(123,141,154,.05), transparent 42%),
+    var(--paper);
+}
+
+/* 详情/分享页：信纸居中阅读宽度 */
+@media (min-width: 960px) {
+  .letter-main .paper-card { max-width: 780px; margin-left: auto; margin-right: auto; width: 100%; }
+  .share-main .paper-card { max-width: 780px; margin-left: auto; margin-right: auto; width: 100%; }
+  .reply-card { max-width: 780px !important; }
+  .letter-main .paper-card:first-child { margin-top: 6px; }
+  .letter-main .paper-card + .paper-card { margin-top: 30px; }
+}
