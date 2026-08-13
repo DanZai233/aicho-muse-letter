@@ -38,8 +38,9 @@ export default function InboxPage() {
         {err ? <p className="form-err">{err}</p> : null}
         {!loading && !err && letters.length === 0 ? (
           <div className="empty-box">
-            <span className="empty-icon">💌</span>
-            <p>信箱还是空的</p>
+            <span className="empty-icon">🕊️</span>
+            <p className="empty-title">信箱还是空的</p>
+            <p className="empty-sub">把第一句话写给想见的人，<br/>让回声在字里行间等你。</p>
             <Link className="empty-btn" to="/">写第一封信</Link>
           </div>
         ) : null}
