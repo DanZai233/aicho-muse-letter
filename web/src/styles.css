@@ -511,3 +511,15 @@ button { font-family: inherit; }
   .hero-title { font-size: 18px; }
   .hero-sub { font-size: 10px; letter-spacing: .25em; }
 }
+
+/* 朗读进度条 */
+.audio-progress {
+  height: 3px; border-radius: 999px; margin: 2px 0 6px;
+  background: var(--line); overflow: hidden; position: relative;
+}
+.audio-progress-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #ff9d7a));
+  transition: width .25s linear;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 55%, transparent);
+}

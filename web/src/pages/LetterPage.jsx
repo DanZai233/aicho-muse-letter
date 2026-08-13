@@ -15,6 +15,7 @@ export default function LetterPage() {
   const [shareUrl, setShareUrl] = useState('');
   const [toast, setToast] = useState('');
   const [regenAudio, setRegenAudio] = useState(null); // index
+  const [progress, setProgress] = useState(null); // { i, pct }
   const pollRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -37,20 +38,34 @@ export default function LetterPage() {
   }, [load]);
 
   function playPara(i, url) {
-    stopAllAudio();
-    setPlaying(null);
-    if (playing === i) return; // 再点一次暂停
+    // 同一段再次点击：暂停/恢复
+    if (playing === i) {
+      if (singleAudio.paused) {
+        singleAudio.play().catch(() => {});
+      } else {
+        singleAudio.pause();
+      }
+      return;
+    }
     if (i > 0 && !finished[i - 1]) {
       setToast('先听完上一段再继续哦');
       setTimeout(() => setToast(''), 2000);
       return;
     }
     if (!url) return;
+    stopAllAudio();
+    setPlaying(null);
     singleAudio.src = url;
+    setProgress({ i, pct: 0 });
     setPlaying(i);
-    singleAudio.play().catch(() => setPlaying(null));
-    singleAudio.onended = () => { setPlaying(null); setFinished(prev => ({ ...prev, [i]: true })); };
-    singleAudio.onerror = () => setPlaying(null);
+    singleAudio.play().catch(() => { setPlaying(null); setProgress(null); });
+    singleAudio.ontimeupdate = () => {
+      if (singleAudio.duration > 0) {
+        setProgress({ i, pct: Math.min(100, Math.round(singleAudio.currentTime / singleAudio.duration * 100)) });
+      }
+    };
+    singleAudio.onended = () => { setPlaying(null); setProgress(null); setFinished(prev => ({ ...prev, [i]: true })); };
+    singleAudio.onerror = () => { setPlaying(null); setProgress(null); };
   }
 
   async function regenPara(i) {
@@ -150,10 +165,15 @@ export default function LetterPage() {
                       title={para.audio_url ? '朗读这一段' : '暂无语音'}
                       disabled={!para.audio_url}
                     >
-                      {playing === i ? '❚❚' : '▶'}
+                      {playing === i ? (singleAudio.paused ? '▶' : '❚❚') : '▶'}
                     </button>
                     <div className="reply-text">
                       <p className="para">{para.text}</p>
+                      {playing === i && progress?.i === i ? (
+                        <div className="audio-progress" aria-label="朗读进度">
+                          <div className="audio-progress-fill" style={{ width: progress.pct + '%' }} />
+                        </div>
+                      ) : null}
                       {para.audio_url ? (
                         <button className="regen-audio-btn" onClick={() => regenPara(i)} disabled={regenAudio !== null}>
                           {regenAudio === i ? '生成中…' : '↻ 重生成语音'}
