@@ -15,6 +15,7 @@ export default function LetterPage() {
   const [shareUrl, setShareUrl] = useState('');
   const [toast, setToast] = useState('');
   const [regenAudio, setRegenAudio] = useState(null); // index
+  const [synthLoading, setSynthLoading] = useState(null); // index（按需合成中）
   const [progress, setProgress] = useState(null); // { i, pct }
   const pollRef = useRef(null);
 
@@ -37,7 +38,7 @@ export default function LetterPage() {
     return () => { clearTimeout(pollRef.current); stopAllAudio(); };
   }, [load]);
 
-  function playPara(i, url) {
+  async function playPara(i, url) {
     // 同一段再次点击：暂停/恢复
     if (playing === i) {
       if (singleAudio.paused) {
@@ -47,12 +48,28 @@ export default function LetterPage() {
       }
       return;
     }
-    if (i > 0 && !finished[i - 1]) {
-      setToast('先听完上一段再继续哦');
-      setTimeout(() => setToast(''), 2000);
+    // 没有音频：先按需合成（并打断当前播放）
+    if (!url) {
+      stopAllAudio();
+      setPlaying(null);
+      setProgress(null);
+      setSynthLoading(i);
+      try {
+        const d = await api.synthAudio(id, i);
+        setLetter(prev => prev ? {
+          ...prev,
+          reply: prev.reply.map((p, j) => j === i ? { ...p, audio_url: d.audio_url, audio_error: null } : p),
+        } : prev);
+        playPara(i, d.audio_url);
+      } catch (e) {
+        setToast('语音生成失败：' + e.message);
+        setTimeout(() => setToast(''), 2500);
+      } finally {
+        setSynthLoading(null);
+      }
       return;
     }
-    if (!url) return;
+    // 直接打断当前播放，立刻读这段
     stopAllAudio();
     setPlaying(null);
     singleAudio.src = url;
@@ -64,7 +81,7 @@ export default function LetterPage() {
         setProgress({ i, pct: Math.min(100, Math.round(singleAudio.currentTime / singleAudio.duration * 100)) });
       }
     };
-    singleAudio.onended = () => { setPlaying(null); setProgress(null); setFinished(prev => ({ ...prev, [i]: true })); };
+    singleAudio.onended = () => { setPlaying(null); setProgress(null); };
     singleAudio.onerror = () => { setPlaying(null); setProgress(null); };
   }
 
@@ -211,10 +228,10 @@ export default function LetterPage() {
                     <button
                       className={'play-btn' + (playing === i ? ' playing' : '') + (finished[i] ? ' fin' : '')}
                       onClick={() => playPara(i, para.audio_url)}
-                      title={para.audio_url ? '朗读这一段' : '暂无语音'}
-                      disabled={!para.audio_url}
+
+                      title={para.audio_url ? '朗读这一段' : '生成并朗读这一段'}
                     >
-                      {playing === i ? (singleAudio.paused ? '▶' : '❚❚') : '▶'}
+                      {synthLoading === i ? '…' : (playing === i ? (singleAudio.paused ? '▶' : '❚❚') : '▶')}
                     </button>
                     <div className="reply-text">
                       <p className="para">{para.text}</p>

@@ -30,6 +30,8 @@ export const api = {
   previewVoice: (body) => req('/letters/preview-voice', { method: 'POST', body: JSON.stringify(body) }),
   librarySearch: (q) => req('/letters/library/search?q=' + encodeURIComponent(q)),
   regenAudio: (id, index) => req('/letters/' + id + '/regen-audio', { method: 'POST', body: JSON.stringify({ index }) }),
+  synthAudio: (id, index) => req('/letters/' + id + '/audio/' + index, { method: 'POST' }),
+  shareSynthAudio: (token, index) => req('/share/' + token + '/audio/' + index, { method: 'POST' }),
   polish: (text, style) => req('/letters/polish', { method: 'POST', body: JSON.stringify({ text, style }) }),
   deleteLetter: (id) => req('/letters/' + id, { method: 'DELETE' }),
   shared: (token) => req('/share/' + token),

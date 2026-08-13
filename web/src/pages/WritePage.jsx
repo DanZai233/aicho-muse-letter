@@ -34,6 +34,7 @@ export default function WritePage() {
   const [polishResult, setPolishResult] = useState('');
   const [polishOpen, setPolishOpen] = useState(false);
   const [personaQuery, setPersonaQuery] = useState('');
+  const [personasLoading, setPersonasLoading] = useState(true);
 
   // 草稿自动保存（防抖）+ 笔名记忆
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function WritePage() {
       setPersonas(list);
       const elysia = list.find(p => p.id === 'preset-elysia') || list[0];
       if (elysia) setSelected(elysia);
-    }).catch(e => setErr('对象列表加载失败：' + e.message));
+    }).catch(e => setErr('对象列表加载失败：' + e.message)).finally(() => setPersonasLoading(false));
     return () => stopAllAudio();
   }, []);
 
@@ -167,7 +168,8 @@ export default function WritePage() {
                 <input className="search-input" value={personaQuery} placeholder="搜索名字…" onChange={e => setPersonaQuery(e.target.value)} />
               </div>
               <div className="persona-scroll">
-                {visiblePersonas.map(p => (
+                {personasLoading ? <p className="empty-hint">正在打开通讯录…</p> : null}
+                {!personasLoading && visiblePersonas.map(p => (
                   <div key={p.id} className={'persona-row' + (selected?.id === p.id ? ' selected' : '')} onClick={() => setSelected(p)}>
                     <span className="row-avatar" style={{ background: p.avatar_color || '#8b7d6b' }}>{p.name.slice(0, 1)}</span>
                     <span className="persona-row-main">

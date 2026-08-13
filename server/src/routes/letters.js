@@ -60,7 +60,8 @@ async function doGenerate(letter) {
     letter.signature = r.signature || letter.persona.name;
     const paragraphs = Array.isArray(r.paragraphs) ? r.paragraphs.map(x => String(x).trim()).filter(Boolean) : [];
     if (!paragraphs.length) throw new Error('回信内容为空');
-    letter.reply = await synthesizeParagraphs(paragraphs, letter.persona.voice_id || '');
+    // 只保存文本段落；语音按需生成（用户点哪段才合成哪段）
+    letter.reply = paragraphs.map(text => ({ text, audio_url: null, audio_error: null }));
     letter.status = 'done';
   } catch (e) {
     console.error('[Letter] 生成回信失败:', e.message);
@@ -166,6 +167,55 @@ router.get('/letters/:id', (req, res) => {
   const letter = db().letters.find(l => l.id === req.params.id && l.visitor_id === visitor);
   if (!letter) return res.status(404).json({ code: 40401, message: '信件不存在' });
   res.json({ code: 0, data: { letter: publicLetter(letter) } });
+});
+
+
+// 按需合成单段语音：用户点哪段才生成哪段（已有缓存直接返回）
+const generatingAudio = new Map(); // `${letterId}:${index}` -> Promise
+router.post('/letters/:id/audio/:index', async (req, res) => {
+  const visitor = visitorOf(req);
+  const letter = db().letters.find(l => l.id === req.params.id && l.visitor_id === visitor);
+  if (!letter) return res.status(404).json({ code: 40401, message: '信件不存在' });
+  const i = Number(req.params.index);
+  const para = letter.reply && letter.reply[i];
+  if (!para) return res.status(400).json({ code: 40001, message: '段落不存在' });
+  const vid = letter.persona_custom?.voice_id || letter.persona.voice_id || '';
+  if (!vid) return res.status(400).json({ code: 40001, message: '该对象没有音色，无法生成语音' });
+  const key = letter.id + ':' + i;
+  if (generatingAudio.has(key)) {
+    try {
+      const existing = await generatingAudio.get(key);
+      return res.json({ code: 0, data: existing });
+    } catch (e) {
+      generatingAudio.delete(key);
+      return res.status(502).json({ code: 50201, message: e.message || '语音生成失败' });
+    }
+  }
+  const promise = (async () => {
+    // 已有 audio_url 且本地文件存在：直接复用
+    if (para.audio_url) {
+      const file = path.basename(para.audio_url);
+      if (fs.existsSync(path.join(AUDIO_DIR, file))) {
+        return { audio_url: para.audio_url, cached: true };
+      }
+    }
+    const r = await synthesize(para.text, vid, false);
+    if (!r.audio_url) throw new Error(r.error || '语音生成失败');
+    letter.reply[i] = { ...para, audio_url: r.audio_url, audio_error: null };
+    letter.updated_at = new Date().toISOString();
+    saveDb();
+    return { audio_url: r.audio_url, cached: !!r.cached };
+  })();
+  generatingAudio.set(key, promise);
+  try {
+    const data = await promise;
+    res.json({ code: 0, data });
+  } catch (e) {
+    console.error('[Letter] 按需语音生成失败:', e.message);
+    res.status(502).json({ code: 50201, message: e.message || '语音生成失败' });
+  } finally {
+    generatingAudio.delete(key);
+  }
 });
 
 // 单段语音重新生成（强制重合成该段音频）
@@ -292,6 +342,53 @@ router.post('/letters/preview-voice', async (req, res) => {
     res.json({ code: 0, data: { audio_url: r.audio_url, cached: !!r.cached } });
   } catch (e) {
     res.status(502).json({ code: 50201, message: '试听失败：' + e.message });
+  }
+});
+
+// 分享页按需合成单段语音：任何人通过分享链接点击段落即可生成/复用同一份音频（服务器统一缓存）
+const generatingShareAudio = new Map(); // letterId:index -> Promise
+router.post('/share/:token/audio/:index', async (req, res) => {
+  const letter = db().letters.find(l => l.share_token === req.params.token);
+  if (!letter) return res.status(404).json({ code: 40401, message: '分享不存在或已关闭' });
+  const i = Number(req.params.index);
+  const para = letter.reply && letter.reply[i];
+  if (!para) return res.status(400).json({ code: 40001, message: '段落不存在' });
+  const vid = letter.persona_custom?.voice_id || letter.persona.voice_id || '';
+  if (!vid) return res.status(400).json({ code: 40001, message: '该对象没有音色，无法生成语音' });
+  const key = letter.id + ':' + i;
+  if (generatingShareAudio.has(key)) {
+    try {
+      const existing = await generatingShareAudio.get(key);
+      return res.json({ code: 0, data: existing });
+    } catch (e) {
+      generatingShareAudio.delete(key);
+      return res.status(502).json({ code: 50201, message: e.message || '语音生成失败' });
+    }
+  }
+  const promise = (async () => {
+    // 已有 audio_url 且本地文件存在：直接复用（与写信人听到的是同一段音频）
+    if (para.audio_url) {
+      const file = path.basename(para.audio_url);
+      if (fs.existsSync(path.join(AUDIO_DIR, file))) {
+        return { audio_url: para.audio_url, cached: true };
+      }
+    }
+    const r = await synthesize(para.text, vid, false);
+    if (!r.audio_url) throw new Error(r.error || '语音生成失败');
+    letter.reply[i] = { ...para, audio_url: r.audio_url, audio_error: null };
+    letter.updated_at = new Date().toISOString();
+    saveDb();
+    return { audio_url: r.audio_url, cached: !!r.cached };
+  })();
+  generatingShareAudio.set(key, promise);
+  try {
+    const data = await promise;
+    res.json({ code: 0, data });
+  } catch (e) {
+    console.error('[Letter] 分享语音生成失败:', e.message);
+    res.status(502).json({ code: 50201, message: e.message || '语音生成失败' });
+  } finally {
+    generatingShareAudio.delete(key);
   }
 });
 
