@@ -37,9 +37,9 @@ export function useParagraphPlayer({ onEnded } = {}) {
       setProgress(null);
       return;
     }
-    // 同一段：暂停/恢复
+    // 同一段：暂停/恢复（以自身状态为准，避免缓冲期 audio.paused 误判导致点击被吞）
     if (playerPlaying && playing === index) {
-      if (playerAudio.paused) {
+      if (paused) {
         playerAudio.play().catch(() => {});
         setPaused(false);
       } else {
@@ -54,9 +54,12 @@ export function useParagraphPlayer({ onEnded } = {}) {
     setProgress({ i: index, pct: 0 });
     playerPlaying = true;
     playerAudio.src = url;
-    playerAudio.play().catch(() => {
+    playerAudio.play().catch((e) => {
+      // 主动打断（暂停/切段）引发的 AbortError 属预期，不重置播放状态
+      if (e && e.name === 'AbortError') return;
       playerPlaying = false;
       setPlaying(null);
+      setPaused(false);
       setProgress(null);
     });
     playerAudio.ontimeupdate = () => {
@@ -77,7 +80,7 @@ export function useParagraphPlayer({ onEnded } = {}) {
       setPaused(false);
       setProgress(null);
     };
-  }, [playing]);
+  }, [playing, paused]);
 
   return { playing, paused, progress, play };
 }

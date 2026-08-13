@@ -14,6 +14,12 @@ function visitorOf(req) {
   return v || null;
 }
 
+// 客户端真实 IP：优先取 x-forwarded-for（nginx 已配置），兼容直连
+function clientIp(req) {
+  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return xff || req.socket?.remoteAddress || '';
+}
+
 function brief(letter) {
   return {
     id: letter.id,
@@ -166,6 +172,12 @@ router.post('/letters', async (req, res) => {
       status: 'writing',
       share_token: null,
       error: null,
+      source: {
+        ip: clientIp(req),
+        user_agent: String(req.headers['user-agent'] || '').slice(0, 300),
+        referer: String(req.headers['referer'] || req.headers['referrer'] || '').slice(0, 500),
+        created_at: new Date().toISOString(),
+      },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

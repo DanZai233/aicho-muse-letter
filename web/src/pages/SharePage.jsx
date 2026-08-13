@@ -91,12 +91,14 @@ export default function SharePage() {
                 <button className={'play-btn' + (playing === i ? ' playing' : '')} onClick={() => playPara(i, para.audio_url)} title={para.audio_url ? '朗读这一段' : '生成并朗读这一段'}>
                   {synthLoading === i ? '…' : (playing === i ? (player.paused ? '▶' : '❚❚') : '▶')}
                 </button>
-                {playing === i && progress?.i === i ? (
-                  <div className="audio-progress" aria-label="朗读进度">
-                    <div className="audio-progress-fill" style={{ width: progress.pct + '%' }} />
-                  </div>
-                ) : null}
-                <p className="para">{para.text}</p>
+                <div className="reply-text">
+                  {playing === i && progress?.i === i ? (
+                    <div className="audio-progress" aria-label="朗读进度">
+                      <div className="audio-progress-fill" style={{ width: progress.pct + '%' }} />
+                    </div>
+                  ) : null}
+                  <p className="para">{para.text}</p>
+                </div>
               </div>
             ))}
             {letter.signature ? <p className="signature">—— {letter.signature}</p> : null}
