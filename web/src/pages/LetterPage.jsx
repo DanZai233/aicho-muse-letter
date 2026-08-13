@@ -106,6 +106,39 @@ export default function LetterPage() {
     } catch (e) { setErr(e.message); setStatus('error'); }
   }
 
+  async function copyFull() {
+    if (!letter) return;
+    const lines = [];
+    lines.push('致 ' + (letter.persona?.name || '') + (letter.pen_name ? '（' + letter.pen_name + '）' : ''));
+    lines.push('');
+    lines.push(String(letter.letter_content || ''));
+    lines.push('');
+    lines.push('—— ' + (letter.persona?.name || '') + ' 的回信 ——');
+    lines.push('');
+    for (const p of (letter.reply || [])) {
+      lines.push(p.text);
+      lines.push('');
+    }
+    if (letter.signature) lines.push(letter.signature);
+    const text = lines.join('\n');
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      setToast('全文已复制 ✓');
+      setTimeout(() => setToast(''), 2200);
+    } catch (e) {
+      setErr('复制失败：' + e.message);
+    }
+  }
+
   async function share() {
     try {
       const d = await api.shareOn(id);
@@ -212,6 +245,7 @@ export default function LetterPage() {
           {letter ? (
             <div className="letter-actions">
               {done || status === 'error' ? <button className="ghost-btn" onClick={regen}>🔄 重新回信</button> : null}
+              <button className="ghost-btn" onClick={copyFull}>📋 复制全文</button>
               <button className="ghost-btn danger" onClick={removeLetter}>🗑 删除这封信</button>
               {done ? (
                 shareUrl ? (
