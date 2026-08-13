@@ -118,6 +118,13 @@ export default function LetterPage() {
     } catch (e) { setErr(e.message); }
   }
 
+  function fmtDate(t) {
+    if (!t) return '';
+    const d = new Date(t);
+    const pad = n => String(n).padStart(2, '0');
+    return d.getFullYear() + ' 年 ' + (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日 · ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
   const pending = status === 'writing' || status === 'replying';
   const done = status === 'done';
 
@@ -136,6 +143,7 @@ export default function LetterPage() {
               <div className="head-text">
                 <span className="head-name">{letter.persona?.name}</span>
                 <span className="head-sub">{letter.persona?.tagline || '来信已收到'}</span>
+                <span className="head-date">{fmtDate(letter.created_at)}</span>
               </div>
               <span className="stamp">致{letter.pen_name}</span>
             </div>

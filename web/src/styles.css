@@ -523,3 +523,6 @@ button { font-family: inherit; }
   transition: width .25s linear;
   box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 55%, transparent);
 }
+
+/* 信头日期 */
+.head-date { font-size: 11px; color: var(--ink-faint); margin-top: 2px; letter-spacing: .05em; }
