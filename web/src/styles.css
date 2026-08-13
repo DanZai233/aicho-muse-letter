@@ -547,3 +547,10 @@ button { font-family: inherit; }
 }
 .ghost-btn.danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
 .ghost-btn.danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+
+/* 移动端：播放按钮加大触控区域 */
+@media (max-width: 959px) {
+  .play-btn { width: 42px; height: 42px; font-size: 14px; }
+  .regen-audio-btn { font-size: 12px; padding: 4px 0; }
+  .reply-para { gap: 12px; }
+}
