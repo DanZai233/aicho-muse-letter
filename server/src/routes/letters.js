@@ -3,7 +3,7 @@ import { Router } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { db, saveDb, uuid, shareToken, DATA_DIR } from '../db.js';
-import { getPersonas, generateReply, synthesizeParagraphs, synthesize, searchLibrary } from '../muse.js';
+import { getPersonas, generateReply, synthesizeParagraphs, synthesize, searchLibrary, polishLetter } from '../muse.js';
 
 const router = Router();
 const AUDIO_DIR = path.join(DATA_DIR, 'audio');
@@ -230,6 +230,22 @@ router.delete('/letters/:id/share', (req, res) => {
   res.json({ code: 0, data: { ok: true } });
 });
 
+
+
+// 信件润色（预设风格）
+router.post('/letters/polish', async (req, res) => {
+  const { text, style } = req.body || {};
+  const t = String(text || '').trim();
+  if (!t) return res.status(400).json({ code: 40001, message: 'text 必填' });
+  if (t.length < 5) return res.status(400).json({ code: 40001, message: '内容太短了' });
+  if (t.length > 3000) return res.status(400).json({ code: 40001, message: '内容太长了（最多 3000 字）' });
+  try {
+    const d = await polishLetter(t, String(style || 'gentle'));
+    res.json({ code: 0, data: d });
+  } catch (e) {
+    res.status(502).json({ code: 50201, message: '润色失败：' + e.message });
+  }
+});
 
 // Fish 音色广场搜索（匿名，低配额）
 router.get('/letters/library/search', async (req, res) => {

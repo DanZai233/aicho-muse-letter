@@ -61,6 +61,12 @@ export async function generateReply({ persona_id, persona_name, persona_tagline,
   return data;
 }
 
+// 信件润色（预设风格）
+export async function polishLetter(text, style) {
+  const data = await muse('/polish', { method: 'POST', body: { text, style }, timeout: 60000 });
+  return data;
+}
+
 // Fish 音色广场搜索（代理 muse）
 export async function searchLibrary(q = '', pageSize = 10) {
   const data = await muse('/library/search', { query: { q, page_size: pageSize }, timeout: 30000 });

@@ -30,5 +30,6 @@ export const api = {
   previewVoice: (body) => req('/letters/preview-voice', { method: 'POST', body: JSON.stringify(body) }),
   librarySearch: (q) => req('/letters/library/search?q=' + encodeURIComponent(q)),
   regenAudio: (id, index) => req('/letters/' + id + '/regen-audio', { method: 'POST', body: JSON.stringify({ index }) }),
+  polish: (text, style) => req('/letters/polish', { method: 'POST', body: JSON.stringify({ text, style }) }),
   shared: (token) => req('/share/' + token),
 };

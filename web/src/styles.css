@@ -302,3 +302,65 @@ button { font-family: inherit; }
 }
 .regen-audio-btn:disabled { opacity: .5; cursor: default; }
 .regen-audio-btn:hover { color: var(--accent); }
+
+/* 润色信件 */
+.polish-toolbar { margin-bottom: 10px; }
+.polish-toggle {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: var(--accent);
+}
+.polish-panel {
+  margin-top: 10px; padding: 12px;
+  background: var(--paper-2); border: 1px dashed var(--line); border-radius: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.polish-styles { display: flex; flex-wrap: wrap; gap: 8px; }
+.style-chip {
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink-soft);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+}
+.style-chip.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); font-weight: 600; }
+.polish-go { padding: 10px; font-size: 14px; }
+.polish-preview {
+  border-top: 1px solid var(--line); padding-top: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.polish-preview-label { color: var(--ink-soft); font-size: 12px; margin: 0; }
+.polish-text {
+  background: var(--paper); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px; font-size: 14px; line-height: 1.9; white-space: pre-wrap; max-height: 240px; overflow-y: auto;
+}
+.polish-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.polish-actions .accent { border-color: var(--accent); color: var(--accent); }
+
+/* ===== 桌面端 ===== */
+@media (min-width: 960px) {
+  .write-main, .inbox-main, .letter-main, .share-main { max-width: 1080px; padding: 26px 28px 70px; }
+  .topbar-inner { max-width: 1080px; }
+
+  /* 写信页双栏 */
+  .write-main { display: grid; grid-template-columns: 420px 1fr; gap: 26px; align-items: start; }
+  .write-main .paper-card { margin-bottom: 0; }
+  .paper-head .persona-strip { flex-wrap: wrap; }
+
+  /* 对象选择用网格（不再横向滚动） */
+  .persona-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    overflow: visible;
+    max-height: none;
+  }
+  .persona-card { flex: none; width: auto; }
+
+  /* 写信卡片右侧栏更宽松 */
+  .letter-area { min-height: 320px; }
+
+  /* 信箱列表双列 */
+  .letter-list { display: grid; grid-template-columns: repeat(2, 1fr); align-items: stretch; }
+  .letter-row { height: 100%; }
+
+  /* 回信卡片段落两栏阅读更舒适 */
+  .letter-main .reply-card .reply-body { max-width: 760px; margin: 0 auto; }
+}

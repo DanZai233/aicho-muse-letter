@@ -21,6 +21,10 @@ export default function WritePage() {
   const [libQuery, setLibQuery] = useState('');
   const [libResults, setLibResults] = useState([]);
   const [libLoading, setLibLoading] = useState(false);
+  const [polishStyle, setPolishStyle] = useState('gentle');
+  const [polishing, setPolishing] = useState(false);
+  const [polishResult, setPolishResult] = useState('');
+  const [polishOpen, setPolishOpen] = useState(false);
 
   useEffect(() => {
     api.personas().then(d => {
@@ -66,6 +70,33 @@ export default function WritePage() {
     } finally {
       setLibLoading(false);
     }
+  }
+
+  const POLISH_STYLES = [
+    { id: 'gentle', label: '温柔治愈', desc: '温暖柔软，多一分抚慰' },
+    { id: 'poetic', label: '诗意浪漫', desc: '画面感与意象，留白' },
+    { id: 'concise', label: '简洁有力', desc: '删繁就简，直击人心' },
+    { id: 'playful', label: '俏皮灵动', desc: '活泼俏皮，小幽默' },
+    { id: 'formal', label: '深情郑重', desc: '庄重深情，郑重表达' },
+  ];
+
+  async function polish() {
+    if (content.trim().length < 5) { setErr('先写几句内容再润色吧'); return; }
+    setPolishing(true); setErr(''); setPolishOpen(true);
+    try {
+      const d = await api.polish(content.trim(), polishStyle);
+      setPolishResult(d.text || '');
+    } catch (e) {
+      setErr('润色失败：' + e.message);
+    } finally {
+      setPolishing(false);
+    }
+  }
+
+  function applyPolish() {
+    if (!polishResult) return;
+    setContent(polishResult);
+    setPolishResult('');
   }
 
   async function send() {
@@ -173,6 +204,30 @@ export default function WritePage() {
           <div className="pen-row">
             <label className="pen-label">落款笔名</label>
             <input className="pen-input" value={penName} maxLength={20} placeholder="你的笔名（可选）" onChange={e => setPenName(e.target.value)} />
+          </div>
+
+          <div className="polish-toolbar">
+            <button className="ghost-btn polish-toggle" onClick={() => setPolishOpen(!polishOpen)}>✨ 润色信件</button>
+            {polishOpen ? (
+              <div className="polish-panel">
+                <div className="polish-styles">
+                  {POLISH_STYLES.map(st => (
+                    <button key={st.id} className={'style-chip' + (polishStyle === st.id ? ' active' : '')} title={st.desc} onClick={() => setPolishStyle(st.id)}>{st.label}</button>
+                  ))}
+                </div>
+                <button className="send-btn polish-go" disabled={polishing} onClick={polish}>{polishing ? '润色中…' : '按这个方向润色'}</button>
+                {polishResult ? (
+                  <div className="polish-preview">
+                    <p className="polish-preview-label">润色结果（采纳后替换原文）</p>
+                    <div className="polish-text">{polishResult}</div>
+                    <div className="polish-actions">
+                      <button className="mini-btn" onClick={() => setPolishResult('')}>放弃</button>
+                      <button className="mini-btn accent" onClick={applyPolish}>采纳到正文</button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <textarea
