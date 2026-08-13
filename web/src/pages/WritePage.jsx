@@ -133,6 +133,13 @@ export default function WritePage() {
   return (
     <div className="page write-page">
       <LetterHeader title="写信" />
+      <div className="write-hero">
+        <span className="hero-mark">💌</span>
+        <div className="hero-text">
+          <h1 className="hero-title">缪斯信笺</h1>
+          <p className="hero-sub">尺素之间，听见回音</p>
+        </div>
+      </div>
       <main className="write-main">
         {/* 左：收信人面板 */}
         <aside className="recipient-panel">

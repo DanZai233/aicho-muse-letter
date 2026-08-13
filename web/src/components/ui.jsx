@@ -45,7 +45,14 @@ export function LetterHeader({ title, backTo, right }) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        {backTo ? <Link to={backTo} className="back-link">←</Link> : <span className="brand">缪斯信笺</span>}
+        {backTo ? (
+          <>
+            <Link to={backTo} className="back-link">←</Link>
+            <span className="brand brand-small">缪斯信笺</span>
+          </>
+        ) : (
+          <span className="brand-mark" aria-hidden="true">💌</span>
+        )}
         <div className="topbar-title">{title || ''}</div>
         <div className="topbar-right">{right || (backTo ? <Link to="/" className="icon-link" title="写信">✎</Link> : <Link to="/inbox" className="icon-link" title="信箱">✉</Link>)}</div>
       </div>
