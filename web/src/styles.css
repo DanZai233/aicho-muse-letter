@@ -336,31 +336,90 @@ button { font-family: inherit; }
 
 /* ===== 桌面端 ===== */
 @media (min-width: 960px) {
-  .write-main, .inbox-main, .letter-main, .share-main { max-width: 1080px; padding: 26px 28px 70px; }
-  .topbar-inner { max-width: 1080px; }
+  .write-main, .inbox-main, .letter-main, .share-main { max-width: 1160px; padding: 28px 30px 70px; }
+  .topbar-inner { max-width: 1160px; }
 
-  /* 写信页双栏 */
-  .write-main { display: grid; grid-template-columns: 420px 1fr; gap: 26px; align-items: start; }
+  /* 写信页：左收信人面板 + 右信纸 */
+  .write-main { display: grid; grid-template-columns: 360px 1fr; gap: 26px; align-items: start; }
   .write-main .paper-card { margin-bottom: 0; }
-  .paper-head .persona-strip { flex-wrap: wrap; }
 
-  /* 对象选择用网格（不再横向滚动） */
-  .persona-list {
-    display: grid !important;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    overflow: visible;
-    max-height: none;
+  /* 收信人面板 */
+  .recipient-panel {
+    position: sticky; top: 84px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    display: flex; flex-direction: column;
+    max-height: calc(100vh - 120px);
+    overflow: hidden;
   }
-  .persona-card { flex: none; width: auto; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .panel-title { font-weight: 700; font-size: 15px; letter-spacing: .08em; }
+  .persona-search { margin-bottom: 10px; }
+  .search-input {
+    width: 100%; background: var(--paper-2); border: 1px solid var(--line);
+    border-radius: 10px; color: var(--ink); padding: 9px 12px; font-size: 13px;
+    font-family: inherit; outline: none;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .persona-scroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px; }
+  .persona-scroll::-webkit-scrollbar { width: 5px; }
+  .persona-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  .persona-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 9px; border-radius: 11px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .persona-row:hover { background: var(--paper-2); }
+  .persona-row.selected { background: color-mix(in srgb, var(--accent) 13%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .persona-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .persona-row-name { font-size: 14px; font-weight: 600; }
+  .persona-row-tag { font-size: 11px; color: var(--ink-soft); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .row-preview {
+    flex: none; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--paper-2); border: 1px solid var(--line); color: var(--accent);
+    font-size: 11px; cursor: pointer; display: grid; place-items: center;
+  }
+  .panel-foot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .panel-foot .persona-bio {
+    font-size: 12px; line-height: 1.7; color: var(--ink-soft); margin: 0;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
 
-  /* 写信卡片右侧栏更宽松 */
-  .letter-area { min-height: 320px; }
+  /* 右侧信纸更大 */
+  .letter-compose { padding: 30px 34px; }
+  .letter-area { min-height: 340px; font-size: 16px; line-height: 2.1; }
 
-  /* 信箱列表双列 */
+  /* 信箱双列 */
   .letter-list { display: grid; grid-template-columns: repeat(2, 1fr); align-items: stretch; }
   .letter-row { height: 100%; }
 
-  /* 回信卡片段落两栏阅读更舒适 */
+  /* 回信段落居中更舒适 */
   .letter-main .reply-card .reply-body { max-width: 760px; margin: 0 auto; }
+}
+
+/* 移动端收信人：横向胶囊，不再长列表 */
+@media (max-width: 959px) {
+  .recipient-panel { margin-bottom: 14px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .panel-title { font-weight: 700; font-size: 14px; }
+  .persona-search { display: none; }
+  .persona-scroll {
+    display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 8px;
+    scrollbar-width: none;
+  }
+  .persona-scroll::-webkit-scrollbar { display: none; }
+  .persona-row {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 7px;
+    background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px;
+    padding: 6px 12px 6px 7px; cursor: pointer; font-size: 13px;
+  }
+  .persona-row.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .persona-row .row-avatar { width: 26px; height: 26px; font-size: 13px; }
+  .persona-row-main { display: flex; align-items: baseline; gap: 4px; }
+  .persona-row-tag { display: none; }
+  .row-preview { display: none; }
+  .panel-foot { display: none; }
 }

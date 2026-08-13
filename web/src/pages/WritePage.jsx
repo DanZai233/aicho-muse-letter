@@ -1,7 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, visitorId } from '../api.js';
-import { LetterHeader, PersonaCard, stopAllAudio } from '../components/ui.jsx';
+import { api } from '../api.js';
+import { LetterHeader, stopAllAudio } from '../components/ui.jsx';
+
+const POLISH_STYLES = [
+  { id: 'gentle', label: '温柔治愈', desc: '温暖柔软，多一分抚慰' },
+  { id: 'poetic', label: '诗意浪漫', desc: '画面感与意象，留白' },
+  { id: 'concise', label: '简洁有力', desc: '删繁就简，直击人心' },
+  { id: 'playful', label: '俏皮灵动', desc: '活泼俏皮，小幽默' },
+  { id: 'formal', label: '深情郑重', desc: '庄重深情，郑重表达' },
+];
 
 export default function WritePage() {
   const nav = useNavigate();
@@ -16,7 +24,7 @@ export default function WritePage() {
   const [customName, setCustomName] = useState('');
   const [customTagline, setCustomTagline] = useState('');
   const [customPersonality, setCustomPersonality] = useState('');
-  const [customVoice, setCustomVoice] = useState(null); // { id, title, sample_audio }
+  const [customVoice, setCustomVoice] = useState(null);
   const [libOpen, setLibOpen] = useState(false);
   const [libQuery, setLibQuery] = useState('');
   const [libResults, setLibResults] = useState([]);
@@ -25,6 +33,7 @@ export default function WritePage() {
   const [polishing, setPolishing] = useState(false);
   const [polishResult, setPolishResult] = useState('');
   const [polishOpen, setPolishOpen] = useState(false);
+  const [personaQuery, setPersonaQuery] = useState('');
 
   useEffect(() => {
     api.personas().then(d => {
@@ -72,14 +81,6 @@ export default function WritePage() {
     }
   }
 
-  const POLISH_STYLES = [
-    { id: 'gentle', label: '温柔治愈', desc: '温暖柔软，多一分抚慰' },
-    { id: 'poetic', label: '诗意浪漫', desc: '画面感与意象，留白' },
-    { id: 'concise', label: '简洁有力', desc: '删繁就简，直击人心' },
-    { id: 'playful', label: '俏皮灵动', desc: '活泼俏皮，小幽默' },
-    { id: 'formal', label: '深情郑重', desc: '庄重深情，郑重表达' },
-  ];
-
   async function polish() {
     if (content.trim().length < 5) { setErr('先写几句内容再润色吧'); return; }
     setPolishing(true); setErr(''); setPolishOpen(true);
@@ -126,17 +127,98 @@ export default function WritePage() {
     }
   }
 
+  const visiblePersonas = personas.filter(p => !personaQuery || p.name.includes(personaQuery) || (p.tagline || '').includes(personaQuery));
+  const recipientName = customMode ? (customName || 'TA') : (selected?.name || 'TA');
+
   return (
     <div className="page write-page">
       <LetterHeader title="写信" />
       <main className="write-main">
-        <section className="paper-card">
+        {/* 左：收信人面板 */}
+        <aside className="recipient-panel">
+          <div className="panel-head">
+            <span className="panel-title">收信人</span>
+            <button className="custom-toggle" onClick={() => { setCustomMode(!customMode); setLibOpen(false); }}>{customMode ? '官方预设' : '＋ 自定义'}</button>
+          </div>
+
+          {!customMode ? (
+            <>
+              <div className="persona-search">
+                <input className="search-input" value={personaQuery} placeholder="搜索名字…" onChange={e => setPersonaQuery(e.target.value)} />
+              </div>
+              <div className="persona-scroll">
+                {visiblePersonas.map(p => (
+                  <div key={p.id} className={'persona-row' + (selected?.id === p.id ? ' selected' : '')} onClick={() => setSelected(p)}>
+                    <span className="row-avatar" style={{ background: p.avatar_color || '#8b7d6b' }}>{p.name.slice(0, 1)}</span>
+                    <span className="persona-row-main">
+                      <span className="persona-row-name">{p.name}</span>
+                      <span className="persona-row-tag">{p.tagline || ''}</span>
+                    </span>
+                    {p.voice_id ? <button className="row-preview" onClick={(e) => { e.stopPropagation(); onPreview(p); }} title="试听声音">♪</button> : null}
+                  </div>
+                ))}
+                {visiblePersonas.length === 0 ? <p className="empty-hint">没有找到这个人</p> : null}
+              </div>
+              <div className="panel-foot">
+                {selected ? <p className="persona-bio">{selected.background || selected.tagline || ''}</p> : <p className="persona-bio">选一位收信人，把信写给 TA。</p>}
+              </div>
+            </>
+          ) : (
+            <div className="custom-box">
+              <div className="custom-row">
+                <label className="pen-label">名字</label>
+                <input className="pen-input" value={customName} maxLength={20} placeholder="给 TA 起个名字" onChange={e => setCustomName(e.target.value)} />
+              </div>
+              <div className="custom-row">
+                <label className="pen-label">一句话</label>
+                <input className="pen-input" value={customTagline} maxLength={60} placeholder="TA 是个怎样的人（可选）" onChange={e => setCustomTagline(e.target.value)} />
+              </div>
+              <div className="custom-row">
+                <label className="pen-label">性格</label>
+                <input className="pen-input" value={customPersonality} maxLength={120} placeholder="温柔、真诚、有想象力（用逗号分隔）" onChange={e => setCustomPersonality(e.target.value)} />
+              </div>
+              <div className="custom-voice">
+                <div className="custom-voice-head">
+                  <span className="pen-label">音色</span>
+                  {customVoice ? <span className="voice-chip">♪ {customVoice.title} <button className="chip-x" onClick={() => setCustomVoice(null)}>✕</button></span> : null}
+                  <button className="mini-btn" onClick={() => setLibOpen(!libOpen)}>{libOpen ? '收起' : '从音色广场选'}</button>
+                </div>
+                {libOpen ? (
+                  <div className="lib-box">
+                    <div className="lib-search">
+                      <input className="pen-input" value={libQuery} placeholder="搜索音色，如：温柔 女声" onChange={e => setLibQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doSearch(libQuery); }} />
+                      <button className="mini-btn" onClick={() => doSearch(libQuery)} disabled={libLoading}>{libLoading ? '搜索中…' : '搜索'}</button>
+                    </div>
+                    <div className="lib-list">
+                      {libResults.map(item => (
+                        <div key={item.id} className={'lib-item' + (customVoice?.id === item.id ? ' selected' : '')} onClick={() => setCustomVoice({ id: item.id, title: item.title, sample_audio: item.sample_audio })}>
+                          <span className="lib-title">{item.title}</span>
+                          {item.sample_audio ? <button className="play-mini" onClick={(e) => { e.stopPropagation(); playSample(item); }}>▶</button> : null}
+                        </div>
+                      ))}
+                      {!libLoading && libResults.length === 0 ? <p className="lib-empty">输入关键词搜索，或直接点搜索看全部</p> : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* 右：信纸 */}
+        <section className="paper-card letter-compose">
           <div className="paper-head">
             <span className="paper-kicker">致</span>
             <div className="persona-strip">
-              {selected ? (
+              {customMode ? (
                 <>
-                  <span className="strip-avatar" style={{ background: selected.avatar_color }}>{selected.name.slice(0,1)}</span>
+                  <span className="strip-avatar" style={{ background: '#8b7d6b' }}>{customName.slice(0, 1) || '?'}</span>
+                  <span className="strip-name">{customName || '自定义对象'}</span>
+                  {customVoice ? <span className="mini-btn">♪ {customVoice.title}</span> : null}
+                </>
+              ) : selected ? (
+                <>
+                  <span className="strip-avatar" style={{ background: selected.avatar_color }}>{selected.name.slice(0, 1)}</span>
                   <span className="strip-name">{selected.name}</span>
                   {selected.voice_id ? <button className="mini-btn" onClick={() => onPreview(selected)}>♪ 试听</button> : null}
                 </>
@@ -144,67 +226,19 @@ export default function WritePage() {
             </div>
           </div>
 
-          <div className="persona-picker">
-            <div className="picker-head">
-              <p className="picker-hint">选择你的写信对象</p>
-              <button className="custom-toggle" onClick={() => { setCustomMode(!customMode); setLibOpen(false); }}>{customMode ? '← 官方预设' : '＋ 自定义对象'}</button>
-            </div>
-
-            {!customMode ? (
-              <>
-                <div className="persona-list">
-                  {personas.map(p => (
-                    <PersonaCard key={p.id} p={p} selected={selected?.id === p.id} onSelect={setSelected} onPreview={onPreview} previewing={previewing} />
-                  ))}
-                </div>
-                {selected?.background ? <p className="persona-bio">{selected.background}</p> : null}
-              </>
-            ) : (
-              <div className="custom-box">
-                <div className="custom-row">
-                  <label className="pen-label">名字</label>
-                  <input className="pen-input" value={customName} maxLength={20} placeholder="给 TA 起个名字" onChange={e => setCustomName(e.target.value)} />
-                </div>
-                <div className="custom-row">
-                  <label className="pen-label">一句话</label>
-                  <input className="pen-input" value={customTagline} maxLength={60} placeholder="TA 是个怎样的人（可选）" onChange={e => setCustomTagline(e.target.value)} />
-                </div>
-                <div className="custom-row">
-                  <label className="pen-label">性格</label>
-                  <input className="pen-input" value={customPersonality} maxLength={120} placeholder="温柔、真诚、有想象力（用逗号分隔）" onChange={e => setCustomPersonality(e.target.value)} />
-                </div>
-                <div className="custom-voice">
-                  <div className="custom-voice-head">
-                    <span className="pen-label">音色</span>
-                    {customVoice ? <span className="voice-chip">♪ {customVoice.title} <button className="chip-x" onClick={() => setCustomVoice(null)}>✕</button></span> : null}
-                    <button className="mini-btn" onClick={() => setLibOpen(!libOpen)}>{libOpen ? '收起' : '从音色广场选'}</button>
-                  </div>
-                  {libOpen ? (
-                    <div className="lib-box">
-                      <div className="lib-search">
-                        <input className="pen-input" value={libQuery} placeholder="搜索音色，如：温柔 女声" onChange={e => setLibQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doSearch(libQuery); }} />
-                        <button className="mini-btn" onClick={() => doSearch(libQuery)} disabled={libLoading}>{libLoading ? '搜索中…' : '搜索'}</button>
-                      </div>
-                      <div className="lib-list">
-                        {libResults.map(item => (
-                          <div key={item.id} className={'lib-item' + (customVoice?.id === item.id ? ' selected' : '')} onClick={() => setCustomVoice({ id: item.id, title: item.title, sample_audio: item.sample_audio })}>
-                            <span className="lib-title">{item.title}</span>
-                            {item.sample_audio ? <button className="play-mini" onClick={(e) => { e.stopPropagation(); playSample(item); }}>▶</button> : null}
-                          </div>
-                        ))}
-                        {!libLoading && libResults.length === 0 ? <p className="lib-empty">输入关键词搜索，或直接点搜索看全部</p> : null}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            )}
-          </div>
-
           <div className="pen-row">
             <label className="pen-label">落款笔名</label>
             <input className="pen-input" value={penName} maxLength={20} placeholder="你的笔名（可选）" onChange={e => setPenName(e.target.value)} />
           </div>
+
+          <textarea
+            className="letter-area"
+            value={content}
+            maxLength={3000}
+            placeholder={'给「' + recipientName + '」写一封信吧……\n\n最近在想什么，想写什么故事，都可以告诉她。'}
+            onChange={e => setContent(e.target.value)}
+          />
+          <div className="letter-count">{content.length}/3000</div>
 
           <div className="polish-toolbar">
             <button className="ghost-btn polish-toggle" onClick={() => setPolishOpen(!polishOpen)}>✨ 润色信件</button>
@@ -229,15 +263,6 @@ export default function WritePage() {
               </div>
             ) : null}
           </div>
-
-          <textarea
-            className="letter-area"
-            value={content}
-            maxLength={3000}
-            placeholder={'给「' + (selected?.name || '…') + '」写一封信吧……\n\n最近在想什么，想写什么故事，都可以告诉她。'}
-            onChange={e => setContent(e.target.value)}
-          />
-          <div className="letter-count">{content.length}/3000</div>
 
           {err ? <p className="form-err">{err}</p> : null}
           <button className="send-btn" disabled={sending} onClick={send}>
