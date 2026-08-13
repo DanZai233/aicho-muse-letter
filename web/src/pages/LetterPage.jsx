@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { LetterHeader, Spinner, stopAllAudio } from '../components/ui.jsx';
+import { getFont, fontFamily } from '../fonts.js';
 
 const singleAudio = new Audio();
 
@@ -16,6 +17,7 @@ export default function LetterPage() {
   const [toast, setToast] = useState('');
   const [regenAudio, setRegenAudio] = useState(null); // index
   const [synthLoading, setSynthLoading] = useState(null); // index（按需合成中）
+  const [fontId, setFontId] = useState(() => getFont().id);
   const [progress, setProgress] = useState(null); // { i, pct }
   const pollRef = useRef(null);
 
@@ -205,7 +207,7 @@ export default function LetterPage() {
               </div>
               <span className="stamp">致{letter.pen_name}</span>
             </div>
-            <div className="letter-body">
+            <div className="letter-body" style={fontFamily(fontId) ? { fontFamily: fontFamily(fontId) } : undefined}>
               <p className="opening">{letter.pen_name}：</p>
               {String(letter.letter_content || '').split(/\n{2,}/).filter(Boolean).map((para, i) => (
                 <p key={i} className="para">{para}</p>
@@ -222,7 +224,7 @@ export default function LetterPage() {
           ) : done ? (
             <section className="paper-card reply-card">
               <div className="reply-tag">回信</div>
-              <div className="letter-body reply-body">
+              <div className="letter-body reply-body" style={fontFamily(fontId) ? { fontFamily: fontFamily(fontId) } : undefined}>
                 {letter.reply?.map((para, i) => (
                   <div key={i} className="reply-para" style={{ animationDelay: (i * 0.28) + 's' }}>
                     <button

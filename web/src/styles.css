@@ -44,6 +44,24 @@ button { font-family: inherit; }
 
 .app { min-height: 100%; }
 
+/* 手写体选择器 */
+.letter-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 8px; flex-wrap: wrap;
+}
+.font-picker { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.font-picker-label { font-size: 13px; color: var(--ink-soft); }
+.font-chip {
+  font-size: 13px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink-soft);
+  cursor: pointer; transition: all .15s;
+}
+.font-chip:hover { border-color: var(--accent); color: var(--accent); }
+.font-chip.active {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
+}
+.letter-count { font-size: 12px; color: var(--ink-faint); }
+
 /* 全局页脚：意见反馈联系方式 */
 body { display: flex; flex-direction: column; min-height: 100vh; }
 .app { display: flex; flex-direction: column; min-height: 100vh; }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { LetterHeader, stopAllAudio } from '../components/ui.jsx';
+import { FONT_OPTIONS, getFont, setFont, fontFamily } from '../fonts.js';
 
 const POLISH_STYLES = [
   { id: 'gentle', label: '温柔治愈', desc: '温暖柔软，多一分抚慰' },
@@ -35,6 +36,12 @@ export default function WritePage() {
   const [polishOpen, setPolishOpen] = useState(false);
   const [personaQuery, setPersonaQuery] = useState('');
   const [personasLoading, setPersonasLoading] = useState(true);
+  const [fontId, setFontId] = useState(() => getFont().id);
+
+  function onFontChange(id) {
+    setFontId(id);
+    setFont(id);
+  }
 
   // 草稿自动保存（防抖）+ 笔名记忆
   useEffect(() => {
@@ -253,14 +260,29 @@ export default function WritePage() {
             <input className="pen-input" value={penName} maxLength={20} placeholder="你的笔名（可选）" onChange={e => setPenName(e.target.value)} />
           </div>
 
+          <div className="letter-toolbar">
+            <div className="font-picker">
+              <span className="font-picker-label">✍ 手写体</span>
+              {FONT_OPTIONS.map(f => (
+                <button
+                  key={f.id}
+                  className={'font-chip' + (fontId === f.id ? ' active' : '')}
+                  title={f.desc}
+                  style={f.family ? { fontFamily: f.family } : undefined}
+                  onClick={() => onFontChange(f.id)}
+                >{f.label}</button>
+              ))}
+            </div>
+            <span className="letter-count">{content.length}/3000</span>
+          </div>
           <textarea
             className="letter-area"
+            style={fontFamily(fontId) ? { fontFamily: fontFamily(fontId) } : undefined}
             value={content}
             maxLength={3000}
             placeholder={'给「' + recipientName + '」写一封信吧……\n\n最近在想什么，想写什么故事，都可以告诉她。'}
             onChange={e => setContent(e.target.value)}
           />
-          <div className="letter-count">{content.length}/3000</div>
 
           <div className="polish-toolbar">
             <button className="ghost-btn polish-toggle" onClick={() => setPolishOpen(!polishOpen)}>✨ 润色信件</button>

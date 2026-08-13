@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { Spinner, stopAllAudio } from '../components/ui.jsx';
+import { getFont, fontFamily } from '../fonts.js';
 
 const singleAudio = new Audio();
 
@@ -11,6 +12,7 @@ export default function SharePage() {
   const [err, setErr] = useState('');
   const [playing, setPlaying] = useState(null);
   const [synthLoading, setSynthLoading] = useState(null); // index（按需合成中）
+  const [fontId, setFontId] = useState(() => getFont().id);
 
   useEffect(() => {
     api.shared(token).then(d => setLetter(d.letter)).catch(e => setErr(e.message));
@@ -84,7 +86,7 @@ export default function SharePage() {
             </div>
             <span className="stamp">致{letter.pen_name}</span>
           </div>
-          <div className="letter-body">
+          <div className="letter-body" style={fontFamily(fontId) ? { fontFamily: fontFamily(fontId) } : undefined}>
             <p className="opening">{letter.pen_name}：</p>
             {String(letter.letter_content || '').split(/\n{2,}/).filter(Boolean).map((para, i) => (
               <p key={i} className="para">{para}</p>
@@ -93,7 +95,7 @@ export default function SharePage() {
         </section>
         <section className="paper-card reply-card">
           <div className="reply-tag">回信</div>
-          <div className="letter-body reply-body">
+          <div className="letter-body reply-body" style={fontFamily(fontId) ? { fontFamily: fontFamily(fontId) } : undefined}>
             {letter.reply?.map((para, i) => (
               <div key={i} className="reply-para">
                 <button className={'play-btn' + (playing === i ? ' playing' : '')} onClick={() => playPara(i, para.audio_url)} title={para.audio_url ? '朗读这一段' : '生成并朗读这一段'}>
