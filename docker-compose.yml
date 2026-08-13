@@ -1,0 +1,44 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: aicho-muse-letter-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-letterroot123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-aicho_muse_letter}
+      MYSQL_USER: ${MYSQL_USER:-letter}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-letter123}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --skip-log-bin
+    volumes:
+      - letter_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-letterroot123}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aicho-muse-letter-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PORT: 3004
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-aicho_muse_letter}
+      MYSQL_USER: ${MYSQL_USER:-letter}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-letter123}
+      MUSE_BASE_URL: ${MUSE_BASE_URL:-http://172.26.0.1:3002/api/v1/letter}
+    ports:
+      - "${APP_PORT:-3004}:3004"
+    volumes:
+      - letter_app_data:/app/data
+
+volumes:
+  letter_mysql_data:
+  letter_app_data:
