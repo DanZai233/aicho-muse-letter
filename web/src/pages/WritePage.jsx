@@ -15,8 +15,8 @@ export default function WritePage() {
   const nav = useNavigate();
   const [personas, setPersonas] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [penName, setPenName] = useState('');
-  const [content, setContent] = useState('');
+  const [penName, setPenName] = useState(() => localStorage.getItem('ml_pen') || '');
+  const [content, setContent] = useState(() => localStorage.getItem('ml_draft') || '');
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
   const [previewing, setPreviewing] = useState(null);
@@ -34,6 +34,19 @@ export default function WritePage() {
   const [polishResult, setPolishResult] = useState('');
   const [polishOpen, setPolishOpen] = useState(false);
   const [personaQuery, setPersonaQuery] = useState('');
+
+  // 草稿自动保存（防抖）+ 笔名记忆
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (content.trim()) localStorage.setItem('ml_draft', content);
+        else localStorage.removeItem('ml_draft');
+        if (penName.trim()) localStorage.setItem('ml_pen', penName);
+        else localStorage.removeItem('ml_pen');
+      } catch { /* 隐私模式忽略 */ }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [content, penName]);
 
   useEffect(() => {
     api.personas().then(d => {
