@@ -28,5 +28,7 @@ export const api = {
   shareOn: (id) => req('/letters/' + id + '/share', { method: 'POST' }),
   shareOff: (id) => req('/letters/' + id + '/share', { method: 'DELETE' }),
   previewVoice: (body) => req('/letters/preview-voice', { method: 'POST', body: JSON.stringify(body) }),
+  librarySearch: (q) => req('/letters/library/search?q=' + encodeURIComponent(q)),
+  regenAudio: (id, index) => req('/letters/' + id + '/regen-audio', { method: 'POST', body: JSON.stringify({ index }) }),
   shared: (token) => req('/share/' + token),
 };

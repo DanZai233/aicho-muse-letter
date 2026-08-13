@@ -3,7 +3,7 @@ import { Router } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { db, saveDb, uuid, shareToken, DATA_DIR } from '../db.js';
-import { getPersonas, generateReply, synthesizeParagraphs, synthesize } from '../muse.js';
+import { getPersonas, generateReply, synthesizeParagraphs, synthesize, searchLibrary } from '../muse.js';
 
 const router = Router();
 const AUDIO_DIR = path.join(DATA_DIR, 'audio');
@@ -48,7 +48,12 @@ async function doGenerate(letter) {
   saveDb();
   try {
     const r = await generateReply({
-      persona_id: letter.persona.id,
+      persona_id: letter.persona_custom ? undefined : letter.persona.id,
+      persona_name: letter.persona_custom?.name,
+      persona_tagline: letter.persona_custom?.tagline,
+      persona_personality: letter.persona_custom?.personality,
+      voice_id: letter.persona_custom?.voice_id || letter.persona.voice_id,
+      voice_name: letter.persona_custom?.voice_name || letter.persona.voice_name,
       pen_name: letter.pen_name || '远方的朋友',
       letter_content: letter.letter_content,
     });
@@ -82,16 +87,33 @@ router.get('/letters/personas', async (req, res) => {
 // 写信并寄出（同步返回草稿，回信异步生成）
 router.post('/letters', async (req, res) => {
   const visitor = visitorOf(req);
-  const { pen_name, persona_id, letter_content } = req.body || {};
+  const { pen_name, persona_id, persona_name, persona_tagline, persona_personality, voice_id, voice_name, letter_content } = req.body || {};
   const content = String(letter_content || '').trim();
   if (!visitor) return res.status(400).json({ code: 40001, message: '缺少访客标识' });
-  if (!persona_id) return res.status(400).json({ code: 40001, message: '请选择写信对象' });
+  if (!persona_id && !persona_name) return res.status(400).json({ code: 40001, message: '请选择写信对象' });
   if (content.length < 5) return res.status(400).json({ code: 40001, message: '信的内容太短了' });
   if (content.length > 3000) return res.status(400).json({ code: 40001, message: '信太长了（最多 3000 字）' });
   try {
-    const personas = await getPersonas();
-    const persona = personas.find(p => p.id === persona_id);
-    if (!persona) return res.status(404).json({ code: 40401, message: '写信对象不存在' });
+    let persona;
+    if (persona_id) {
+      const personas = await getPersonas();
+      persona = personas.find(p => p.id === persona_id);
+      if (!persona) return res.status(404).json({ code: 40401, message: '写信对象不存在' });
+    } else {
+      // 自定义对象（音色广场选择）：名字 + 音色 + 性格
+      const customName = String(persona_name || '').trim().slice(0, 20);
+      if (!customName) return res.status(400).json({ code: 40001, message: '请填写对象名字' });
+      const vid = String(voice_id || '').trim();
+      if (!vid) return res.status(400).json({ code: 40001, message: '请选择一个音色' });
+      persona = {
+        id: 'custom:' + customName,
+        name: customName,
+        tagline: String(persona_tagline || '').trim().slice(0, 60) || '一位特别的朋友',
+        avatar_color: '#8b7d6b',
+        voice_id: vid,
+        voice_name: String(voice_name || '').trim() || '自定义音色',
+      };
+    }
     const letter = {
       id: uuid(),
       visitor_id: visitor,
@@ -101,6 +123,13 @@ router.post('/letters', async (req, res) => {
         avatar_color: persona.avatar_color || '#8b7d6b',
         voice_id: persona.voice_id || null, voice_name: persona.voice_name || '',
       },
+      persona_custom: !persona_id ? {
+        name: persona.name,
+        tagline: persona.tagline || '',
+        personality: Array.isArray(persona_personality) ? persona_personality.map(String).slice(0, 6) : [],
+        voice_id: persona.voice_id || '',
+        voice_name: persona.voice_name || '',
+      } : null,
       letter_content: content,
       signature: '',
       reply: [],
@@ -139,6 +168,33 @@ router.get('/letters/:id', (req, res) => {
   res.json({ code: 0, data: { letter: publicLetter(letter) } });
 });
 
+// 单段语音重新生成（强制重合成该段音频）
+router.post('/letters/:id/regen-audio', async (req, res) => {
+  const visitor = visitorOf(req);
+  const { index } = req.body || {};
+  const letter = db().letters.find(l => l.id === req.params.id && l.visitor_id === visitor);
+  if (!letter) return res.status(404).json({ code: 40401, message: '信件不存在' });
+  if (running.get(letter.id)) return res.status(409).json({ code: 40901, message: '正在处理中，请稍候' });
+  const i = Number(index);
+  const para = letter.reply && letter.reply[i];
+  if (!para) return res.status(400).json({ code: 40001, message: '段落不存在' });
+  const vid = letter.persona_custom?.voice_id || letter.persona.voice_id || '';
+  if (!vid) return res.status(400).json({ code: 40001, message: '该对象没有音色，无法重新生成语音' });
+  running.set(letter.id, true);
+  try {
+    const r = await synthesize(para.text, vid, true);
+    if (!r.audio_url) return res.status(502).json({ code: 50201, message: r.error || '语音生成失败' });
+    letter.reply[i] = { ...para, audio_url: r.audio_url, audio_error: null };
+    letter.updated_at = new Date().toISOString();
+    saveDb();
+    res.json({ code: 0, data: { audio_url: r.audio_url, cached: !!r.cached } });
+  } catch (e) {
+    res.status(502).json({ code: 50201, message: '语音生成失败：' + e.message });
+  } finally {
+    running.delete(letter.id);
+  }
+});
+
 // 重新生成回信
 router.post('/letters/:id/regen', async (req, res) => {
   const visitor = visitorOf(req);
@@ -174,6 +230,18 @@ router.delete('/letters/:id/share', (req, res) => {
   res.json({ code: 0, data: { ok: true } });
 });
 
+
+// Fish 音色广场搜索（匿名，低配额）
+router.get('/letters/library/search', async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const pageSize = Math.min(20, Math.max(1, Number(req.query.page_size) || 10));
+  try {
+    const list = await searchLibrary(q, pageSize);
+    res.json({ code: 0, data: { list, total: list.length } });
+  } catch (e) {
+    res.status(502).json({ code: 50201, message: '音色广场搜索失败：' + e.message });
+  }
+});
 
 // 音色试听（固定文案，缓存：同一音色只合成一次）
 router.post('/letters/preview-voice', async (req, res) => {

@@ -14,6 +14,7 @@ export default function LetterPage() {
   const [finished, setFinished] = useState({});
   const [shareUrl, setShareUrl] = useState('');
   const [toast, setToast] = useState('');
+  const [regenAudio, setRegenAudio] = useState(null); // index
   const pollRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -50,6 +51,24 @@ export default function LetterPage() {
     singleAudio.play().catch(() => setPlaying(null));
     singleAudio.onended = () => { setPlaying(null); setFinished(prev => ({ ...prev, [i]: true })); };
     singleAudio.onerror = () => setPlaying(null);
+  }
+
+  async function regenPara(i) {
+    if (regenAudio !== null) return;
+    setRegenAudio(i);
+    try {
+      const d = await api.regenAudio(id, i);
+      setLetter(prev => prev ? {
+        ...prev,
+        reply: prev.reply.map((p, j) => j === i ? { ...p, audio_url: d.audio_url, audio_error: null } : p),
+      } : prev);
+      setToast('这一段的声音已重新生成 ✓');
+      setTimeout(() => setToast(''), 2200);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setRegenAudio(null);
+    }
   }
 
   async function regen() {
@@ -133,7 +152,14 @@ export default function LetterPage() {
                     >
                       {playing === i ? '❚❚' : '▶'}
                     </button>
-                    <p className="para">{para.text}</p>
+                    <div className="reply-text">
+                      <p className="para">{para.text}</p>
+                      {para.audio_url ? (
+                        <button className="regen-audio-btn" onClick={() => regenPara(i)} disabled={regenAudio !== null}>
+                          {regenAudio === i ? '生成中…' : '↻ 重生成语音'}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
                 {letter.signature ? <p className="signature">—— {letter.signature}</p> : null}

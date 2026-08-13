@@ -13,7 +13,8 @@ let personasAt = 0;
 const PERSONAS_TTL = 5 * 60 * 1000;
 
 async function muse(pathname, opts = {}) {
-  const url = MUSE_BASE + pathname;
+  const qs = opts.query ? '?' + new URLSearchParams(opts.query).toString() : '';
+  const url = MUSE_BASE + pathname + qs;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeout || 120000);
   try {
@@ -44,10 +45,49 @@ export async function getPersonas(force = false) {
   return personasCache;
 }
 
-// 生成回信段落
-export async function generateReply({ persona_id, pen_name, letter_content }) {
-  const data = await muse('/reply', { method: 'POST', body: { persona_id, pen_name, letter_content }, timeout: 120000 });
+// 生成回信段落（支持自定义写信对象：persona_name + voice_id + personality）
+export async function generateReply({ persona_id, persona_name, persona_tagline, persona_personality, voice_id, voice_name, pen_name, letter_content }) {
+  const body = {
+    persona_id: persona_id || undefined,
+    persona_name: persona_name || undefined,
+    persona_tagline: persona_tagline || undefined,
+    persona_personality: persona_personality || undefined,
+    voice_id: voice_id || undefined,
+    voice_name: voice_name || undefined,
+    pen_name,
+    letter_content,
+  };
+  const data = await muse('/reply', { method: 'POST', body, timeout: 120000 });
   return data;
+}
+
+// Fish 音色广场搜索（代理 muse）
+export async function searchLibrary(q = '', pageSize = 10) {
+  const data = await muse('/library/search', { query: { q, page_size: pageSize }, timeout: 30000 });
+  return data.list || [];
+}
+
+// 单段 TTS：force=true 强制重新合成（覆盖本地+远端缓存）
+export async function synthesize(text, voiceId, force = false) {
+  const t = String(text || '').trim();
+  if (!t) return { audio_url: null, error: '空文本' };
+  const target = audioCachePath(t, voiceId);
+  if (!force && fs.existsSync(target)) {
+    return { audio_url: '/audio/' + path.basename(target), cached: true };
+  }
+  const data = await muse('/tts', { method: 'POST', body: { text: t, voice_id: voiceId, force: !!force }, timeout: 90000 });
+  const url = absolutize(data.audio_url);
+  if (!url) return { audio_url: null, error: 'muse 未返回音频' };
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(60000) });
+    if (!r.ok) throw new Error('音频下载 ' + r.status);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length < 1000) throw new Error('音频数据异常（过小）');
+    fs.writeFileSync(target, buf);
+    return { audio_url: '/audio/' + path.basename(target), cached: false, bytes: buf.length };
+  } catch (e) {
+    return { audio_url: null, error: e.message };
+  }
 }
 
 function audioCachePath(text, voiceId) {
@@ -62,29 +102,6 @@ function absolutize(url) {
   // MUSE_BASE 形如 https://muse.danzaii.cn/api/v1/letter
   const base = MUSE_BASE.replace(/\/api\/v1\/letter$/, '');
   return base + url;
-}
-
-// 单段 TTS：命中本地缓存直接返回；否则调 muse 并下载 mp3 转存
-export async function synthesize(text, voiceId) {
-  const t = String(text || '').trim();
-  if (!t) return { audio_url: null, error: '空文本' };
-  const target = audioCachePath(t, voiceId);
-  if (fs.existsSync(target)) {
-    return { audio_url: '/audio/' + path.basename(target), cached: true };
-  }
-  const data = await muse('/tts', { method: 'POST', body: { text: t, voice_id: voiceId }, timeout: 90000 });
-  const url = absolutize(data.audio_url);
-  if (!url) return { audio_url: null, error: 'muse 未返回音频' };
-  try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(60000) });
-    if (!r.ok) throw new Error('音频下载 ' + r.status);
-    const buf = Buffer.from(await r.arrayBuffer());
-    if (buf.length < 1000) throw new Error('音频数据异常（过小）');
-    fs.writeFileSync(target, buf);
-    return { audio_url: '/audio/' + path.basename(target), cached: false, bytes: buf.length };
-  } catch (e) {
-    return { audio_url: null, error: e.message };
-  }
 }
 
 // 逐段 TTS（串行，每段间小间隔；返回段落增强后的对象）
