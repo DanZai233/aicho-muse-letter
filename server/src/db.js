@@ -74,6 +74,12 @@ function mysqlScheduleSave() {
           [letter.id, JSON.stringify(letter)]
         );
       }
+      // 同步删除已移除的信件（MySQL 模式之前只增不改，删除实际未落库）
+      const liveIds = new Set(cache.letters.map(l => l.id));
+      const [rows] = await p.query('SELECT id FROM letters');
+      for (const r of rows) {
+        if (!liveIds.has(r.id)) await p.query('DELETE FROM letters WHERE id = ?', [r.id]);
+      }
     } catch (e) {
       console.error('[DB] MySQL 落库失败:', e.message);
     }

@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { initStorage } from './db.js';
+import { initStorage, db, saveDb } from './db.js';
 import { DATA_DIR } from './db.js';
 import letterRoutes from './routes/letters.js';
 
@@ -11,6 +11,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUDIO_DIR = path.join(DATA_DIR, 'audio');
 
 await initStorage();
+// 服务重启恢复：把卡在生成中的信件标记为失败，让用户可重新生成（容器重启会中断内存任务）
+for (const letter of db().letters) {
+  if (letter.status === 'writing' || letter.status === 'replying') {
+    letter.status = 'error';
+    letter.error = '回信生成被服务重启中断，请点击「再寄一次」重新生成';
+    saveDb();
+  }
+}
 
 const app = express();
 app.use(cors());
