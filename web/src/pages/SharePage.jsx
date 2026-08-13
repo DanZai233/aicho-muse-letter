@@ -107,7 +107,10 @@ export default function SharePage() {
             {letter.signature ? <p className="signature">—— {letter.signature}</p> : null}
           </div>
         </section>
-        <p className="share-foot">在 缪斯信笺，把想说的话写成信，听回音。 <Link to="/">也来写一封</Link></p>
+        <div className="share-cta">
+          <Link className="share-cta-btn" to="/">✍ 去写自己的信<span className="share-cta-arrow">→</span></Link>
+          <p className="share-foot">在 缪斯信笺，把想说的话写成信，听回音。</p>
+        </div>
       </main>
     </div>
   );

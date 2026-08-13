@@ -293,6 +293,20 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 
 /* 分享页 */
 .share-banner { text-align: center; color: var(--ink-soft); font-size: 13px; letter-spacing: .2em; margin-bottom: 16px; }
+/* 分享页 CTA：去写自己的信 */
+.share-cta { text-align: center; margin-top: 30px; }
+.share-cta-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 18px; font-weight: 600;
+  padding: 14px 38px; border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, #d99a6a, #c96a5e);
+  box-shadow: 0 8px 24px rgba(201, 106, 94, .35);
+  transition: transform .15s, box-shadow .15s;
+}
+.share-cta-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(201, 106, 94, .45); }
+.share-cta-arrow { font-size: 20px; transition: transform .15s; }
+.share-cta-btn:hover .share-cta-arrow { transform: translateX(4px); }
 .share-foot { text-align: center; color: var(--ink-faint); font-size: 12px; margin-top: 22px; }
 .share-main { padding-top: 28px; }
 
