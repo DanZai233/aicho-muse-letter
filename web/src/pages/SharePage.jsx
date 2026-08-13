@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { Spinner, stopAllAudio } from '../components/ui.jsx';
+import { Spinner, stopAllAudio, useParagraphPlayer } from '../components/ui.jsx';
 import { getFont, fontFamily } from '../fonts.js';
-
-const singleAudio = new Audio();
 
 export default function SharePage() {
   const token = window.location.pathname.split('/').pop();
   const [letter, setLetter] = useState(null);
   const [err, setErr] = useState('');
-  const [playing, setPlaying] = useState(null);
+  // 共享播放器：暂停/恢复、进度条、自动连播
+  const player = useParagraphPlayer({
+    onEnded: (i) => {
+      const reply = letter?.reply || [];
+      const next = reply[i + 1];
+      if (next && next.audio_url) playPara(i + 1, next.audio_url);
+    },
+  });
+  const { playing, progress } = player;
   const [synthLoading, setSynthLoading] = useState(null); // index（按需合成中）
   const [fontId, setFontId] = useState(() => getFont().id);
 
@@ -20,19 +26,10 @@ export default function SharePage() {
   }, [token]);
 
   async function playPara(i, url) {
-    // 同一段再次点击：暂停/恢复
-    if (playing === i) {
-      if (singleAudio.paused) {
-        singleAudio.play().catch(() => {});
-      } else {
-        singleAudio.pause();
-      }
-      return;
-    }
     // 没有音频：先按需合成（并打断当前播放），生成完立刻播放
     if (!url) {
       stopAllAudio();
-      setPlaying(null);
+      player.play(-1, null);
       setSynthLoading(i);
       try {
         const d = await api.shareSynthAudio(token, i);
@@ -48,14 +45,7 @@ export default function SharePage() {
       }
       return;
     }
-    // 自由点播：直接打断当前播放，立刻读这段
-    stopAllAudio();
-    setPlaying(null);
-    singleAudio.src = url;
-    setPlaying(i);
-    singleAudio.play().catch(() => setPlaying(null));
-    singleAudio.onended = () => setPlaying(null);
-    singleAudio.onerror = () => setPlaying(null);
+    player.play(i, url);
   }
 
   if (!letter && !err) return <div className="page"><Spinner label="正在展开信笺…" /></div>;
@@ -99,8 +89,13 @@ export default function SharePage() {
             {letter.reply?.map((para, i) => (
               <div key={i} className="reply-para">
                 <button className={'play-btn' + (playing === i ? ' playing' : '')} onClick={() => playPara(i, para.audio_url)} title={para.audio_url ? '朗读这一段' : '生成并朗读这一段'}>
-                  {synthLoading === i ? '…' : (playing === i ? '❚❚' : '▶')}
+                  {synthLoading === i ? '…' : (playing === i ? (player.paused ? '▶' : '❚❚') : '▶')}
                 </button>
+                {playing === i && progress?.i === i ? (
+                  <div className="audio-progress" aria-label="朗读进度">
+                    <div className="audio-progress-fill" style={{ width: progress.pct + '%' }} />
+                  </div>
+                ) : null}
                 <p className="para">{para.text}</p>
               </div>
             ))}

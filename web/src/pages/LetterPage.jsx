@@ -1,24 +1,29 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { LetterHeader, Spinner, stopAllAudio } from '../components/ui.jsx';
+import { LetterHeader, Spinner, stopAllAudio, useParagraphPlayer } from '../components/ui.jsx';
 import { getFont, fontFamily } from '../fonts.js';
-
-const singleAudio = new Audio();
 
 export default function LetterPage() {
   const id = window.location.pathname.split('/').pop();
   const [letter, setLetter] = useState(null);
   const [status, setStatus] = useState('loading');
   const [err, setErr] = useState('');
-  const [playing, setPlaying] = useState(null);
-  const [finished, setFinished] = useState({});
+  // 共享播放器：暂停/恢复、进度条、自动连播
+  const player = useParagraphPlayer({
+    onEnded: (i) => {
+      // 播完自动续播下一段（若有音频）
+      const reply = letter?.reply || [];
+      const next = reply[i + 1];
+      if (next && next.audio_url) playPara(i + 1, next.audio_url);
+    },
+  });
+  const { playing, progress } = player;
   const [shareUrl, setShareUrl] = useState('');
   const [toast, setToast] = useState('');
   const [regenAudio, setRegenAudio] = useState(null); // index
   const [synthLoading, setSynthLoading] = useState(null); // index（按需合成中）
   const [fontId, setFontId] = useState(() => getFont().id);
-  const [progress, setProgress] = useState(null); // { i, pct }
   const pollRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -41,20 +46,10 @@ export default function LetterPage() {
   }, [load]);
 
   async function playPara(i, url) {
-    // 同一段再次点击：暂停/恢复
-    if (playing === i) {
-      if (singleAudio.paused) {
-        singleAudio.play().catch(() => {});
-      } else {
-        singleAudio.pause();
-      }
-      return;
-    }
-    // 没有音频：先按需合成（并打断当前播放）
+    // 没有音频：先按需合成（并打断当前播放），生成完立刻播放
     if (!url) {
       stopAllAudio();
-      setPlaying(null);
-      setProgress(null);
+      player.play(-1, null); // 清空播放态
       setSynthLoading(i);
       try {
         const d = await api.synthAudio(id, i);
@@ -71,20 +66,8 @@ export default function LetterPage() {
       }
       return;
     }
-    // 直接打断当前播放，立刻读这段
-    stopAllAudio();
-    setPlaying(null);
-    singleAudio.src = url;
-    setProgress({ i, pct: 0 });
-    setPlaying(i);
-    singleAudio.play().catch(() => { setPlaying(null); setProgress(null); });
-    singleAudio.ontimeupdate = () => {
-      if (singleAudio.duration > 0) {
-        setProgress({ i, pct: Math.min(100, Math.round(singleAudio.currentTime / singleAudio.duration * 100)) });
-      }
-    };
-    singleAudio.onended = () => { setPlaying(null); setProgress(null); };
-    singleAudio.onerror = () => { setPlaying(null); setProgress(null); };
+    // 暂停/恢复与打断由共享播放器处理
+    player.play(i, url);
   }
 
   async function regenPara(i) {
@@ -116,8 +99,7 @@ export default function LetterPage() {
   async function regen() {
     setStatus('replying');
     setLetter(prev => prev ? { ...prev, reply: [], signature: '', status: 'replying' } : prev);
-    setFinished({});
-    setPlaying(null);
+    player.play(-1, null);
     stopAllAudio();
     try {
       await api.regen(id);
@@ -228,20 +210,19 @@ export default function LetterPage() {
                 {letter.reply?.map((para, i) => (
                   <div key={i} className="reply-para" style={{ animationDelay: (i * 0.28) + 's' }}>
                     <button
-                      className={'play-btn' + (playing === i ? ' playing' : '') + (finished[i] ? ' fin' : '')}
+                      className={'play-btn' + (playing === i ? ' playing' : '')}
                       onClick={() => playPara(i, para.audio_url)}
-
                       title={para.audio_url ? '朗读这一段' : '生成并朗读这一段'}
                     >
-                      {synthLoading === i ? '…' : (playing === i ? (singleAudio.paused ? '▶' : '❚❚') : '▶')}
+                      {synthLoading === i ? '…' : (playing === i ? (player.paused ? '▶' : '❚❚') : '▶')}
                     </button>
                     <div className="reply-text">
-                      <p className="para">{para.text}</p>
                       {playing === i && progress?.i === i ? (
                         <div className="audio-progress" aria-label="朗读进度">
                           <div className="audio-progress-fill" style={{ width: progress.pct + '%' }} />
                         </div>
                       ) : null}
+                      <p className="para">{para.text}</p>
                       {para.audio_url ? (
                         <button className="regen-audio-btn" onClick={() => regenPara(i)} disabled={regenAudio !== null}>
                           {regenAudio === i ? '生成中…' : '↻ 重生成语音'}

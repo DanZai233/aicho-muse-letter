@@ -566,7 +566,7 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 
 /* 朗读进度条 */
 .audio-progress {
-  height: 3px; border-radius: 999px; margin: 2px 0 6px;
+  height: 3px; border-radius: 999px; margin: 4px 0 10px;
   background: var(--line); overflow: hidden; position: relative;
 }
 .audio-progress-fill {
