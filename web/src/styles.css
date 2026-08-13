@@ -44,6 +44,20 @@ button { font-family: inherit; }
 
 .app { min-height: 100%; }
 
+/* 全局页脚：意见反馈联系方式 */
+body { display: flex; flex-direction: column; min-height: 100vh; }
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+.app-footer {
+  margin-top: auto;
+  text-align: center;
+  padding: 16px 16px 20px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  border-top: 1px solid var(--line);
+}
+.app-footer .footer-link { color: var(--accent); }
+.app-footer .footer-sep { margin: 0 8px; color: var(--ink-faint); }
+
 /* 顶栏 */
 .topbar {
   position: sticky; top: 0; z-index: 20;

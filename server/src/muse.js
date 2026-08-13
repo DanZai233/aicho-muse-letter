@@ -46,7 +46,7 @@ export async function getPersonas(force = false) {
 }
 
 // 生成回信段落（支持自定义写信对象：persona_name + voice_id + personality）
-export async function generateReply({ persona_id, persona_name, persona_tagline, persona_personality, voice_id, voice_name, pen_name, letter_content }) {
+export async function generateReply({ persona_id, persona_name, persona_tagline, persona_personality, voice_id, voice_name, pen_name, letter_content, history }) {
   const body = {
     persona_id: persona_id || undefined,
     persona_name: persona_name || undefined,
@@ -56,6 +56,7 @@ export async function generateReply({ persona_id, persona_name, persona_tagline,
     voice_name: voice_name || undefined,
     pen_name,
     letter_content,
+    history: Array.isArray(history) ? history : undefined,
   };
   const data = await muse('/reply', { method: 'POST', body, timeout: 120000 });
   return data;

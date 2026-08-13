@@ -36,8 +36,36 @@ function publicLetter(letter) {
     signature: letter.signature || '',
     reply: letter.reply || [],
     status: letter.status,
+    error: letter.error || null,
     created_at: letter.created_at,
   };
+}
+
+// 回信段落 -> 纯文本
+function replyToText(replyArr) {
+  if (!Array.isArray(replyArr)) return '';
+  return replyArr.map(p => (typeof p === 'string' ? p : p.text || '')).filter(Boolean).join('\n');
+}
+
+// 同一用户 + 同一收信人：自动带上最近 3 轮往来信作为上下文（连续写信可延续话题）
+// 不同用户/不同收信人之间严格隔离（按 visitor_id + persona.id 过滤）
+function buildHistory(letter) {
+  const visitor = letter.visitor_id;
+  const personaKey = letter.persona?.id;
+  if (!visitor || !personaKey) return [];
+  const prev = db().letters
+    .filter(l => l.visitor_id === visitor && l.persona?.id === personaKey && l.id !== letter.id
+      && l.status === 'done' && Array.isArray(l.reply) && l.reply.length)
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+    .slice(-3);
+  const history = [];
+  for (const p of prev) {
+    const userText = String(p.letter_content || '').trim().slice(0, 500);
+    const aiText = replyToText(p.reply).trim().slice(0, 800);
+    if (userText) history.push({ role: 'user', content: userText });
+    if (aiText) history.push({ role: 'assistant', content: aiText });
+  }
+  return history;
 }
 
 // 生成回信（内部：LLM + 逐段 TTS）
@@ -56,6 +84,7 @@ async function doGenerate(letter) {
       voice_name: letter.persona_custom?.voice_name || letter.persona.voice_name,
       pen_name: letter.pen_name || '远方的朋友',
       letter_content: letter.letter_content,
+      history: buildHistory(letter),
     });
     letter.signature = r.signature || letter.persona.name;
     const paragraphs = Array.isArray(r.paragraphs) ? r.paragraphs.map(x => String(x).trim()).filter(Boolean) : [];
