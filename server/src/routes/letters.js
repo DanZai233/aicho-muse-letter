@@ -195,6 +195,27 @@ router.post('/letters/:id/regen-audio', async (req, res) => {
   }
 });
 
+
+// 删除信件（同时清理音频缓存文件）
+router.delete('/letters/:id', (req, res) => {
+  const visitor = visitorOf(req);
+  const idx = db().letters.findIndex(l => l.id === req.params.id && l.visitor_id === visitor);
+  if (idx === -1) return res.status(404).json({ code: 40401, message: '信件不存在' });
+  const [letter] = db().letters.splice(idx, 1);
+  if (letter.reply) {
+    for (const p of letter.reply) {
+      if (p.audio_url) {
+        const file = path.basename(p.audio_url);
+        if (/^[0-9a-f]{24}\.mp3$/.test(file)) {
+          try { fs.unlinkSync(path.join(AUDIO_DIR, file)); } catch { /* 忽略 */ }
+        }
+      }
+    }
+  }
+  saveDb();
+  res.json({ code: 0, data: { ok: true, id: letter.id } });
+});
+
 // 重新生成回信
 router.post('/letters/:id/regen', async (req, res) => {
   const visitor = visitorOf(req);

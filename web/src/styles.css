@@ -532,3 +532,18 @@ button { font-family: inherit; }
 
 /* 信头日期 */
 .head-date { font-size: 11px; color: var(--ink-faint); margin-top: 2px; letter-spacing: .05em; }
+
+/* 删除按钮 */
+.row-del {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  border: 1px solid transparent; background: transparent; color: var(--ink-faint);
+  font-size: 12px; cursor: pointer; display: grid; place-items: center;
+  opacity: 0; transition: opacity .15s, background .15s, color .15s;
+}
+.letter-row:hover .row-del { opacity: 1; }
+.row-del:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+@media (max-width: 959px) {
+  .row-del { opacity: 1; }
+}
+.ghost-btn.danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
+.ghost-btn.danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }

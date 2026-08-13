@@ -13,6 +13,18 @@ export default function InboxPage() {
     api.letters().then(d => setLetters(d.list || [])).catch(e => setErr(e.message)).finally(() => setLoading(false));
   }, []);
 
+  async function remove(id, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm('确定要删除这封信吗？删除后无法恢复。')) return;
+    try {
+      await api.deleteLetter(id);
+      setLetters(prev => prev.filter(l => l.id !== id));
+    } catch (err) {
+      alert('删除失败：' + err.message);
+    }
+  }
+
   function fmt(t) {
     const d = new Date(t);
     const now = new Date();
@@ -57,6 +69,7 @@ export default function InboxPage() {
                   <span className={'status-dot ' + l.status} />
                   <span className="row-time">{fmt(l.created_at)}</span>
                 </span>
+                <button className="row-del" title="删除这封信" onClick={(e) => remove(l.id, e)}>✕</button>
               </Link>
             </li>
           ))}

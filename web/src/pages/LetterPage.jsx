@@ -86,6 +86,14 @@ export default function LetterPage() {
     }
   }
 
+  async function removeLetter() {
+    if (!window.confirm('确定要删除这封信吗？删除后无法恢复。')) return;
+    try {
+      await api.deleteLetter(id);
+      location.href = '/inbox';
+    } catch (e) { setErr(e.message); }
+  }
+
   async function regen() {
     setStatus('replying');
     setLetter(prev => prev ? { ...prev, reply: [], signature: '', status: 'replying' } : prev);
@@ -204,6 +212,7 @@ export default function LetterPage() {
           {letter ? (
             <div className="letter-actions">
               {done || status === 'error' ? <button className="ghost-btn" onClick={regen}>🔄 重新回信</button> : null}
+              <button className="ghost-btn danger" onClick={removeLetter}>🗑 删除这封信</button>
               {done ? (
                 shareUrl ? (
                   <>
