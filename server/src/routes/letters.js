@@ -399,13 +399,4 @@ router.get('/share/:token', (req, res) => {
   res.json({ code: 0, data: { letter: publicLetter(letter) } });
 });
 
-// 音频静态访问（本域转存的 mp3）
-router.get('/audio/:file', (req, res) => {
-  const file = String(req.params.file || '');
-  if (!/^[0-9a-f]{24}\.mp3$/.test(file)) return res.status(400).json({ code: 40001, message: '非法文件' });
-  const p = path.join(AUDIO_DIR, file);
-  if (!fs.existsSync(p)) return res.status(404).json({ code: 40401, message: '音频不存在' });
-  res.set('Content-Type', 'audio/mpeg').set('Cache-Control', 'public, max-age=86400').sendFile(p);
-});
-
 export default router;
