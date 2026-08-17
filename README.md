@@ -4,7 +4,22 @@
 
 一个无需登录的「写信 → AI 回信 → 有声朗读」应用：选一位人设对象（可试听声音）、落款笔名、写一封信，回信按段落慢慢浮现，每一段都能用对方的声音读出来。写完的信自动收进信箱，可以反复回看、重新回信，也可以生成分享链接。
 
+## 截图
+
+写信页（默认对象：爱莉希雅）：
+
+![写信页](docs/screenshots/02-write.png)
+
+AI 回信（逐段浮现 + 有声朗读）：
+
+![回信页](docs/screenshots/03-reply.png)
+
+信箱：
+
+![信箱](docs/screenshots/05-inbox.png)
+
 ## 架构
+
 
 - **信笺应用（本仓库）**：独立部署，存储独立（MySQL `aicho_muse_letter` + 本地音频缓存），匿名访客（浏览器 `localStorage` 持久的 `visitor_id`）隔离信箱。
 - **缪斯公共接口（aicho-muse 仓库）**：`/api/v1/letter/*` 提供人设/音色列表、Fish 音色广场搜索、AI 回信生成、分段 TTS。信笺后端只依赖这几个公开接口，并通过 `MUSE_BASE_URL` 配置。
