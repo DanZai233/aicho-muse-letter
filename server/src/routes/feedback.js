@@ -47,6 +47,34 @@ function adminOk(req) {
   return !!(ADMIN_TOKEN && (q === ADMIN_TOKEN || h === ADMIN_TOKEN));
 }
 
+// 写信统计（需 FEEDBACK_ADMIN_TOKEN）：每日写信量 + 汇总（近 days 天，默认 14）
+router.get('/stats/letters', (req, res) => {
+  if (!adminOk(req)) {
+    return res.status(403).json({ code: 40301, message: '无权访问（服务端未配置或 token 错误）' });
+  }
+  const days = Math.min(90, Math.max(1, Number(req.query.days) || 14));
+  const letters = db().letters || [];
+  const byDay = {};
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getTime() - i * 86400000);
+    const key = d.toISOString().slice(0, 10);
+    byDay[key] = 0;
+  }
+  let total = 0;
+  let done = 0;
+  for (const l of letters) {
+    const key = String(l.created_at || '').slice(0, 10);
+    if (byDay[key] !== undefined) {
+      byDay[key]++;
+      total++;
+      if (l.status === 'done') done++;
+    }
+  }
+  const trend = Object.entries(byDay).map(([date, count]) => ({ date, count }));
+  res.json({ code: 0, data: { days, total, done, trend } });
+});
+
 // 管理查询（需 FEEDBACK_ADMIN_TOKEN；?status=new 只看未处理）
 router.get('/feedback', (req, res) => {
   if (!adminOk(req)) {
