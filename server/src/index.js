@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { initStorage, db, saveDb } from './db.js';
 import { DATA_DIR } from './db.js';
 import letterRoutes from './routes/letters.js';
+import feedbackRoutes from './routes/feedback.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUDIO_DIR = path.join(DATA_DIR, 'audio');
@@ -38,6 +39,7 @@ app.get('/audio/:file', (req, res) => {
 });
 
 app.use('/api/v1', letterRoutes);
+app.use('/api/v1', feedbackRoutes);
 
 // 前端静态资源（生产构建后）
 const webDist = fs.existsSync(path.join(__dirname, '..', 'public'))

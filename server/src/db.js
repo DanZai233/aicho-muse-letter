@@ -17,7 +17,7 @@ function loadJson() {
   if (fs.existsSync(DB_FILE)) {
     try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch { /* fallthrough */ }
   }
-  return { letters: [] };
+  return { letters: [], feedbacks: [] };
 }
 
 function saveJson() {
@@ -53,12 +53,19 @@ async function ensureTable() {
     value JSON NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  await p.query(`CREATE TABLE IF NOT EXISTS feedbacks (
+    id VARCHAR(64) PRIMARY KEY,
+    value JSON NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 }
 
 async function mysqlLoad() {
   const p = await getPool();
   const [rows] = await p.query('SELECT id, value FROM letters');
   cache.letters = rows.map(r => r.value).filter(v => v && typeof v === 'object');
+  const [fbRows] = await p.query('SELECT id, value FROM feedbacks');
+  cache.feedbacks = fbRows.map(r => r.value).filter(v => v && typeof v === 'object');
 }
 
 let mysqlTimer = null;
@@ -80,6 +87,18 @@ function mysqlScheduleSave() {
       for (const r of rows) {
         if (!liveIds.has(r.id)) await p.query('DELETE FROM letters WHERE id = ?', [r.id]);
       }
+      // 反馈表同样增删同步
+      for (const fb of cache.feedbacks) {
+        await p.query(
+          'INSERT INTO feedbacks (id, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
+          [fb.id, JSON.stringify(fb)]
+        );
+      }
+      const liveFbIds = new Set(cache.feedbacks.map(f => f.id));
+      const [fbRows] = await p.query('SELECT id FROM feedbacks');
+      for (const r of fbRows) {
+        if (!liveFbIds.has(r.id)) await p.query('DELETE FROM feedbacks WHERE id = ?', [r.id]);
+      }
     } catch (e) {
       console.error('[DB] MySQL 落库失败:', e.message);
     }
@@ -99,6 +118,7 @@ export async function initStorage() {
 
 export function db() {
   if (!cache) { cache = loadJson(); }
+  if (!Array.isArray(cache.feedbacks)) cache.feedbacks = [];
   return cache;
 }
 

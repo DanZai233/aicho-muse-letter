@@ -3,6 +3,7 @@ import WritePage from './pages/WritePage.jsx';
 import InboxPage from './pages/InboxPage.jsx';
 import LetterPage from './pages/LetterPage.jsx';
 import SharePage from './pages/SharePage.jsx';
+import FeedbackWidget from './components/FeedbackWidget.jsx';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <span className="footer-sep">·</span>
         <span>QQ 932351233</span>
       </footer>
+      <FeedbackWidget />
 </div>
 );
 }

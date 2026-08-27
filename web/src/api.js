@@ -35,4 +35,5 @@ export const api = {
   polish: (text, style) => req('/letters/polish', { method: 'POST', body: JSON.stringify({ text, style }) }),
   deleteLetter: (id) => req('/letters/' + id, { method: 'DELETE' }),
   shared: (token) => req('/share/' + token),
+  submitFeedback: (body) => req('/feedback', { method: 'POST', body: JSON.stringify(body) }),
 };

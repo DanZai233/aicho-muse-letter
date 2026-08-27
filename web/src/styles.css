@@ -606,3 +606,62 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 .row-status.done { color: #6d9b6d; }
 .row-status.replying, .row-status.writing { color: var(--accent); }
 .row-status.error { color: var(--danger); }
+
+/* 反馈悬浮按钮 + 弹窗 */
+.feedback-fab {
+  position: fixed; right: 18px; bottom: 24px; z-index: 100;
+  width: 48px; height: 48px; border-radius: 50%;
+  border: none; cursor: pointer; font-size: 20px;
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: var(--shadow); transition: transform .15s;
+}
+.feedback-fab:hover { transform: scale(1.08); }
+
+.feedback-mask {
+  position: fixed; inset: 0; z-index: 110;
+  background: rgba(30, 22, 12, .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.feedback-card {
+  width: 100%; max-width: 400px;
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 18px 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.feedback-head { display: flex; align-items: center; justify-content: space-between; }
+.feedback-title { font-weight: 700; font-size: 15px; }
+.feedback-x {
+  border: none; background: transparent; color: var(--ink-faint);
+  font-size: 15px; cursor: pointer; padding: 2px 6px;
+}
+.feedback-types { display: flex; gap: 6px; flex-wrap: wrap; }
+.feedback-type {
+  font-size: 12px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--paper-2); color: var(--ink-soft);
+  cursor: pointer;
+}
+.feedback-type.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.feedback-textarea {
+  width: 100%; min-height: 110px; resize: vertical;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--paper-2); color: var(--ink);
+  padding: 10px 12px; font-size: 14px; font-family: inherit;
+}
+.feedback-input {
+  width: 100%;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--paper-2); color: var(--ink);
+  padding: 9px 12px; font-size: 13px; font-family: inherit;
+}
+.feedback-input::placeholder, .feedback-textarea::placeholder { color: var(--ink-faint); }
+.feedback-submit {
+  border: none; border-radius: 999px; padding: 10px 0;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 14px; cursor: pointer;
+}
+.feedback-submit:disabled { opacity: .6; cursor: default; }
+.feedback-done { text-align: center; padding: 26px 0 20px; }
+.feedback-done-icon { font-size: 34px; }
+.feedback-done p { margin: 8px 0 0; font-weight: 700; }
+.feedback-done-sub { font-size: 12px; color: var(--ink-soft); font-weight: 400 !important; }
