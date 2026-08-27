@@ -41,9 +41,15 @@ router.post('/feedback', (req, res) => {
   res.json({ code: 0, data: { id: fb.id, status: fb.status } });
 });
 
+function adminOk(req) {
+  const q = String(req.query.token || '');
+  const h = String(req.headers['x-admin-token'] || '');
+  return !!(ADMIN_TOKEN && (q === ADMIN_TOKEN || h === ADMIN_TOKEN));
+}
+
 // 管理查询（需 FEEDBACK_ADMIN_TOKEN；?status=new 只看未处理）
 router.get('/feedback', (req, res) => {
-  if (!ADMIN_TOKEN || req.query.token !== ADMIN_TOKEN) {
+  if (!adminOk(req)) {
     return res.status(403).json({ code: 40301, message: '无权访问（服务端未配置或 token 错误）' });
   }
   const status = String(req.query.status || '').trim();
@@ -56,7 +62,7 @@ router.get('/feedback', (req, res) => {
 
 // 标记已处理（管理员）
 router.patch('/feedback/:id', (req, res) => {
-  if (!ADMIN_TOKEN || req.query.token !== ADMIN_TOKEN) {
+  if (!adminOk(req)) {
     return res.status(403).json({ code: 40301, message: '无权访问' });
   }
   const fb = db().feedbacks.find(f => f.id === req.params.id);
