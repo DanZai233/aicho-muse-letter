@@ -101,4 +101,76 @@ router.patch('/feedback/:id', (req, res) => {
   res.json({ code: 0, data: { id: fb.id, status: fb.status } });
 });
 
+// 信件管理（需 FEEDBACK_ADMIN_TOKEN）：列出全部信件，含分享链接
+router.get('/admin/letters', (req, res) => {
+  if (!adminOk(req)) {
+    return res.status(403).json({ code: 40301, message: '无权访问（服务端未配置或 token 错误）' });
+  }
+  const status = String(req.query.status || '').trim();
+  const shared = String(req.query.shared || '').trim();
+  const q = String(req.query.q || '').trim().toLowerCase();
+  let list = (db().letters || []).slice();
+  if (status) list = list.filter(l => l.status === status);
+  if (shared === '1') list = list.filter(l => !!l.share_token);
+  if (q) {
+    list = list.filter(l => [l.pen_name, l.persona?.name, l.letter_content]
+      .filter(Boolean).join(' ').toLowerCase().includes(q));
+  }
+  list.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const total = list.length;
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
+  const start = (page - 1) * pageSize;
+  res.json({
+    code: 0,
+    data: {
+      total, page, page_size: pageSize,
+      list: list.slice(start, start + pageSize).map(l => ({
+        id: l.id,
+        pen_name: l.pen_name || '',
+        persona_name: l.persona?.name || '',
+        persona_tagline: l.persona?.tagline || '',
+        voice_name: l.persona?.voice_name || '',
+        status: l.status,
+        error: l.error || null,
+        reply_count: Array.isArray(l.reply) ? l.reply.length : 0,
+        letter_preview: String(l.letter_content || '').replace(/\s+/g, ' ').slice(0, 80),
+        share_token: l.share_token || null,
+        share_path: l.share_token ? '/l/' + l.share_token : null,
+        created_at: l.created_at,
+      })),
+    },
+  });
+});
+
+// 单封信详情（需 FEEDBACK_ADMIN_TOKEN）：完整原文 + 回信 + 分享链接
+router.get('/admin/letters/:id', (req, res) => {
+  if (!adminOk(req)) {
+    return res.status(403).json({ code: 40301, message: '无权访问' });
+  }
+  const l = (db().letters || []).find(x => x.id === req.params.id);
+  if (!l) return res.status(404).json({ code: 40401, message: '信件不存在' });
+  res.json({
+    code: 0,
+    data: {
+      letter: {
+        id: l.id,
+        pen_name: l.pen_name || '',
+        persona: l.persona || null,
+        letter_content: l.letter_content || '',
+        signature: l.signature || '',
+        reply: l.reply || [],
+        status: l.status,
+        error: l.error || null,
+        share_token: l.share_token || null,
+        share_path: l.share_token ? '/l/' + l.share_token : null,
+        visitor_id: l.visitor_id || null,
+        source: l.source ? { ip: l.source.ip, created_at: l.source.created_at } : null,
+        created_at: l.created_at,
+        updated_at: l.updated_at,
+      },
+    },
+  });
+});
+
 export default router;
