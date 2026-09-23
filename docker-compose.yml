@@ -33,12 +33,22 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-aicho_muse_letter}
       MYSQL_USER: ${MYSQL_USER:-letter}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-letter123}
-      MUSE_BASE_URL: ${MUSE_BASE_URL:-http://172.26.0.1:3002/api/v1/letter}
+      MUSE_BASE_URL: ${MUSE_BASE_URL:-http://aicho-muse-app:3001/api/v1/letter}
     ports:
       - "${APP_PORT:-3004}:3004"
     volumes:
       - letter_app_data:/app/data
+    # 接入 muse 的网络：两者是独立 compose 项目，默认不在同一网络，
+    # 容器名 aicho-muse-app 无法解析（ENOTFOUND）；加入后可直接用容器名互访。
+    networks:
+      - default
+      - muse-net
 
 volumes:
   letter_mysql_data:
   letter_app_data:
+
+networks:
+  muse-net:
+    external: true
+    name: aicho-muse_default
