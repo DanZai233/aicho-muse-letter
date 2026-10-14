@@ -1,81 +1,65 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { LetterHeader, Spinner, stopAllAudio, useParagraphPlayer } from '../components/ui.jsx';
+import { LetterHeader, Spinner, stopAllAudio, useLetterPlayback } from '../components/ui.jsx';
 import { getFont, fontFamily } from '../fonts.js';
 
 export default function LetterPage() {
-  const id = window.location.pathname.split('/').pop();
+  const { id } = useParams();
   const [letter, setLetter] = useState(null);
   const [status, setStatus] = useState('loading');
   const [err, setErr] = useState('');
-  // 共享播放器：暂停/恢复、进度条、自动连播
-  const player = useParagraphPlayer({
-    onEnded: (i) => {
-      // 播完自动续播下一段（若有音频）
-      const reply = letter?.reply || [];
-      const next = reply[i + 1];
-      if (next && next.audio_url) playPara(i + 1, next.audio_url);
-    },
+  const player = useLetterPlayback({ sourceId: id, letter, setLetter,
+    synthesize: (i, signal) => api.synthAudio(id, i, signal),
+    onError: message => setErr(message),
   });
+  const { playPara, synthLoading } = player;
   const { playing, progress } = player;
   const [shareUrl, setShareUrl] = useState('');
   const [toast, setToast] = useState('');
   const [regenAudio, setRegenAudio] = useState(null); // index
-  const [synthLoading, setSynthLoading] = useState(null); // index（按需合成中）
   const [fontId, setFontId] = useState(() => getFont().id);
   const pollRef = useRef(null);
+  const controllerRef = useRef(null);
 
   const load = useCallback(async () => {
+    clearTimeout(pollRef.current);
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setErr('');
     try {
-      const d = await api.letter(id);
+      const d = await api.letter(id, controller.signal);
+      if (controller.signal.aborted) return;
+      setShareUrl(d.letter.share_token ? location.origin + '/l/' + d.letter.share_token : '');
       setLetter(d.letter);
       setStatus(d.letter.status);
       if (d.letter.status === 'writing' || d.letter.status === 'replying') {
         pollRef.current = setTimeout(load, 1800);
       }
     } catch (e) {
+      if (controller.signal.aborted) return;
       setErr(e.message);
       setStatus('error');
     }
   }, [id]);
 
   useEffect(() => {
+    setLetter(null);
+    setStatus('loading');
+    setShareUrl('');
     load();
-    return () => { clearTimeout(pollRef.current); stopAllAudio(); };
+    return () => { clearTimeout(pollRef.current); controllerRef.current?.abort(); stopAllAudio(); };
   }, [load]);
-
-  async function playPara(i, url) {
-    // 没有音频：先按需合成（并打断当前播放），生成完立刻播放
-    if (!url) {
-      stopAllAudio();
-      player.play(-1, null); // 清空播放态
-      setSynthLoading(i);
-      try {
-        const d = await api.synthAudio(id, i);
-        setLetter(prev => prev ? {
-          ...prev,
-          reply: prev.reply.map((p, j) => j === i ? { ...p, audio_url: d.audio_url, audio_error: null } : p),
-        } : prev);
-        playPara(i, d.audio_url);
-      } catch (e) {
-        setToast('语音生成失败：' + e.message);
-        setTimeout(() => setToast(''), 2500);
-      } finally {
-        setSynthLoading(null);
-      }
-      return;
-    }
-    // 暂停/恢复与打断由共享播放器处理
-    player.play(i, url);
-  }
 
   async function regenPara(i) {
     if (regenAudio !== null) return;
+    const version = letter.reply_version;
+    player.stop();
     setRegenAudio(i);
     try {
       const d = await api.regenAudio(id, i);
-      setLetter(prev => prev ? {
+      setLetter(prev => prev && prev.reply_version === version ? {
         ...prev,
         reply: prev.reply.map((p, j) => j === i ? { ...p, audio_url: d.audio_url, audio_error: null } : p),
       } : prev);
@@ -97,6 +81,10 @@ export default function LetterPage() {
   }
 
   async function regen() {
+    clearTimeout(pollRef.current);
+    controllerRef.current?.abort();
+    player.stop();
+    setErr('');
     setStatus('replying');
     setLetter(prev => prev ? { ...prev, reply: [], signature: '', status: 'replying' } : prev);
     player.play(-1, null);
@@ -145,8 +133,8 @@ export default function LetterPage() {
       const d = await api.shareOn(id);
       const url = location.origin + d.share_url;
       setShareUrl(url);
-      await navigator.clipboard.writeText(url);
-      setToast('分享链接已复制 ✓');
+      try { await navigator.clipboard.writeText(url); setToast('分享链接已复制 ✓'); }
+      catch { setToast('分享已开启，请复制下方链接'); }
       setTimeout(() => setToast(''), 2500);
     } catch (e) { setErr(e.message); }
   }
@@ -176,7 +164,7 @@ export default function LetterPage() {
         right={<Link to="/" className="icon-link">✎</Link>} />
       {toast ? <div className="toast">{toast}</div> : null}
       {err ? <p className="form-err page-err">{err}</p> : null}
-      {!letter ? <Spinner label="正在取信…" /> : (
+      {!letter ? (err ? <button className="ghost-btn" onClick={load}>重新取信</button> : <Spinner label="正在取信…" />) : (
         <main className="letter-main">
           {/* 来信 */}
           <section className="paper-card incoming">
@@ -206,12 +194,13 @@ export default function LetterPage() {
           ) : done ? (
             <section className="paper-card reply-card">
               <div className="reply-tag">回信</div>
+              <button className="ghost-btn" onClick={player.readingAll ? player.stop : player.readAll}>{player.readingAll ? '停止朗读' : '朗读整封信'}</button>
               <div className="letter-body reply-body" style={fontFamily(fontId) ? { fontFamily: fontFamily(fontId) } : undefined}>
                 {letter.reply?.map((para, i) => (
                   <div key={i} className="reply-para" style={{ animationDelay: (i * 0.28) + 's' }}>
                     <button
                       className={'play-btn' + (playing === i ? ' playing' : '')}
-                      onClick={() => playPara(i, para.audio_url)}
+                      onClick={() => playPara(i, para.audio_url)} aria-label={"朗读第 " + (i + 1) + " 段"}
                       title={para.audio_url ? '朗读这一段' : '生成并朗读这一段'}
                     >
                       {synthLoading === i ? '…' : (playing === i ? (player.paused ? '▶' : '❚❚') : '▶')}
@@ -245,6 +234,9 @@ export default function LetterPage() {
           {letter ? (
             <div className="letter-actions">
               {done || status === 'error' ? <button className="ghost-btn" onClick={regen}>🔄 重新回信</button> : null}
+              <Link className="ghost-btn" to={'/?from=' + id}>接着写</Link>
+              <Link className="ghost-btn" to={'/?from=' + id + '&new=1'}>开启新话题</Link>
+              <Link className="ghost-btn" to={'/inbox?persona=' + encodeURIComponent(letter.persona.id)}>查看与 TA 的往来</Link>
               <button className="ghost-btn" onClick={copyFull}>📋 复制全文</button>
               <button className="ghost-btn danger" onClick={removeLetter}>🗑 删除这封信</button>
               {done ? (

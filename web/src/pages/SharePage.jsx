@@ -1,60 +1,37 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { Spinner, stopAllAudio, useParagraphPlayer } from '../components/ui.jsx';
+import { Spinner, stopAllAudio, useLetterPlayback } from '../components/ui.jsx';
 import { getFont, fontFamily } from '../fonts.js';
 
 export default function SharePage() {
-  const token = window.location.pathname.split('/').pop();
+  const { token } = useParams();
   const [letter, setLetter] = useState(null);
+  const [retry, setRetry] = useState(0);
   const [err, setErr] = useState('');
-  // 共享播放器：暂停/恢复、进度条、自动连播
-  const player = useParagraphPlayer({
-    onEnded: (i) => {
-      const reply = letter?.reply || [];
-      const next = reply[i + 1];
-      if (next && next.audio_url) playPara(i + 1, next.audio_url);
-    },
+  const player = useLetterPlayback({ sourceId: token, letter, setLetter,
+    synthesize: (i, signal) => api.shareSynthAudio(token, i, signal),
+    onError: message => setErr(message),
   });
+  const { playPara, synthLoading } = player;
   const { playing, progress } = player;
-  const [synthLoading, setSynthLoading] = useState(null); // index（按需合成中）
   const [fontId, setFontId] = useState(() => getFont().id);
 
   useEffect(() => {
-    api.shared(token).then(d => setLetter(d.letter)).catch(e => setErr(e.message));
-    return () => { stopAllAudio(); };
-  }, [token]);
-
-  async function playPara(i, url) {
-    // 没有音频：先按需合成（并打断当前播放），生成完立刻播放
-    if (!url) {
-      stopAllAudio();
-      player.play(-1, null);
-      setSynthLoading(i);
-      try {
-        const d = await api.shareSynthAudio(token, i);
-        setLetter(prev => prev ? {
-          ...prev,
-          reply: prev.reply.map((p, j) => j === i ? { ...p, audio_url: d.audio_url, audio_error: null } : p),
-        } : prev);
-        playPara(i, d.audio_url);
-      } catch (e) {
-        console.error('语音生成失败', e);
-      } finally {
-        setSynthLoading(null);
-      }
-      return;
-    }
-    player.play(i, url);
-  }
+    const controller = new AbortController();
+    setErr('');
+    setLetter(null);
+    api.shared(token, controller.signal).then(d => { if (!controller.signal.aborted) setLetter(d.letter); }).catch(e => { if (!controller.signal.aborted) setErr(e.message); });
+    return () => { controller.abort(); stopAllAudio(); };
+  }, [token, retry]);
 
   if (!letter && !err) return <div className="page"><Spinner label="正在展开信笺…" /></div>;
-  if (err) return (
+  if (err && !letter) return (
     <div className="page share-page">
       <main className="share-main">
         <div className="empty-box">
           <span className="empty-icon">📭</span>
-          <p>{err}</p>
+          <p>{err}</p><button className="ghost-btn" onClick={() => setRetry(n => n + 1)}>重试</button>
           <Link className="empty-btn" to="/">去写一封信</Link>
         </div>
       </main>
@@ -64,6 +41,7 @@ export default function SharePage() {
   return (
     <div className="page share-page">
       <main className="share-main">
+        {err ? <p role="alert" className="form-err">{err}（点击段落可重试）</p> : null}
         <div className="share-banner">
           <span>💌 一封来自缪斯的回信</span>
         </div>
@@ -85,10 +63,11 @@ export default function SharePage() {
         </section>
         <section className="paper-card reply-card">
           <div className="reply-tag">回信</div>
+              <button className="ghost-btn" onClick={player.readingAll ? player.stop : player.readAll}>{player.readingAll ? '停止朗读' : '朗读整封信'}</button>
           <div className="letter-body reply-body" style={fontFamily(fontId) ? { fontFamily: fontFamily(fontId) } : undefined}>
             {letter.reply?.map((para, i) => (
               <div key={i} className="reply-para">
-                <button className={'play-btn' + (playing === i ? ' playing' : '')} onClick={() => playPara(i, para.audio_url)} title={para.audio_url ? '朗读这一段' : '生成并朗读这一段'}>
+                <button className={'play-btn' + (playing === i ? ' playing' : '')} onClick={() => playPara(i, para.audio_url)} aria-label={"朗读第 " + (i + 1) + " 段"} title={para.audio_url ? '朗读这一段' : '生成并朗读这一段'}>
                   {synthLoading === i ? '…' : (playing === i ? (player.paused ? '▶' : '❚❚') : '▶')}
                 </button>
                 <div className="reply-text">

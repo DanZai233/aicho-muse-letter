@@ -2,7 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { DATA_DIR } from './db.js';
+import { upstreamQueue } from './tasks.js';
+import { DATA_DIR, db } from './db.js';
 
 export const MUSE_BASE = String(process.env.MUSE_BASE_URL || 'http://127.0.0.1:3002/api/v1/letter').replace(/\/+$/, '');
 const AUDIO_DIR = path.join(DATA_DIR, 'audio');
@@ -10,9 +11,14 @@ fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
 let personasCache = null;
 let personasAt = 0;
+let personasTask = null;
 const PERSONAS_TTL = 5 * 60 * 1000;
 
 async function muse(pathname, opts = {}) {
+  return upstreamQueue(() => fetchMuse(pathname, opts));
+}
+
+async function fetchMuse(pathname, opts = {}) {
   const qs = opts.query ? '?' + new URLSearchParams(opts.query).toString() : '';
   const url = MUSE_BASE + pathname + qs;
   const ctrl = new AbortController();
@@ -39,10 +45,12 @@ async function muse(pathname, opts = {}) {
 // 人设列表（缓存 5 分钟），供写信页选择
 export async function getPersonas(force = false) {
   if (!force && personasCache && Date.now() - personasAt < PERSONAS_TTL) return personasCache;
-  const data = await muse('/personas');
-  personasCache = data.list || [];
-  personasAt = Date.now();
-  return personasCache;
+  if (!personasTask) personasTask = muse('/personas').then(data => {
+    personasCache = data.list || [];
+    personasAt = Date.now();
+    return personasCache;
+  }).finally(() => { personasTask = null; });
+  return personasTask;
 }
 
 // 生成回信段落（支持自定义写信对象：persona_name + voice_id + personality）
@@ -75,7 +83,16 @@ export async function searchLibrary(q = '', pageSize = 10) {
 }
 
 // 单段 TTS：force=true 强制重新合成（覆盖本地+远端缓存）
-export async function synthesize(text, voiceId, force = false) {
+const audioTasks = new Map();
+export function synthesize(text, voiceId, force = false) {
+  const key = audioCachePath(String(text || '').trim(), voiceId);
+  if (audioTasks.has(key)) return audioTasks.get(key);
+  const task = synthesizeFile(text, voiceId, force).finally(() => audioTasks.delete(key));
+  audioTasks.set(key, task);
+  return task;
+}
+
+async function synthesizeFile(text, voiceId, force = false) {
   const t = String(text || '').trim();
   if (!t) return { audio_url: null, error: '空文本' };
   const target = audioCachePath(t, voiceId);
@@ -90,8 +107,10 @@ export async function synthesize(text, voiceId, force = false) {
     if (!r.ok) throw new Error('音频下载 ' + r.status);
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length < 1000) throw new Error('音频数据异常（过小）');
-    fs.writeFileSync(target, buf);
-    return { audio_url: '/audio/' + path.basename(target), cached: false, bytes: buf.length };
+    const tmp = target + '.' + crypto.randomUUID() + '.tmp';
+    await fs.promises.writeFile(tmp, buf);
+    await fs.promises.rename(tmp, target);
+    return { audio_url: '/audio/' + path.basename(target) + (force ? '?v=' + Date.now() : ''), cached: false, bytes: buf.length };
   } catch (e) {
     return { audio_url: null, error: e.message };
   }
@@ -120,4 +139,15 @@ export async function synthesizeParagraphs(paragraphs, voiceId) {
     if (i < paragraphs.length - 1) await new Promise(res => setTimeout(res, 250));
   }
   return out;
+}
+
+export async function cleanupAudio({ maxAgeMs = (Number(process.env.AUDIO_RETENTION_DAYS) || 30) * 86400000 } = {}) {
+  const referenced = new Set(db().letters.flatMap(l => (l.reply || []).map(p =>
+    p.audio_url?.split('/').pop()?.split('?')[0]).filter(Boolean)));
+  for (const name of await fs.promises.readdir(AUDIO_DIR)) {
+    if (!/^[0-9a-f]{24}\.mp3$/.test(name) || referenced.has(name) || audioTasks.has(path.join(AUDIO_DIR, name))) continue;
+    const file = path.join(AUDIO_DIR, name);
+    const stat = await fs.promises.stat(file).catch(() => null);
+    if (stat && Date.now() - stat.mtimeMs > maxAgeMs) await fs.promises.unlink(file).catch(() => {});
+  }
 }

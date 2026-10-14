@@ -3,13 +3,18 @@ import { Router } from 'express';
 import { db, saveDb, uuid } from '../db.js';
 
 const router = Router();
+for (const method of ['get', 'post', 'delete', 'patch']) {
+  const register = router[method].bind(router);
+  router[method] = (route, handler) => register(route, (req, res, next) =>
+    Promise.resolve().then(() => handler(req, res, next)).catch(next));
+}
+
 
 const ADMIN_TOKEN = process.env.FEEDBACK_ADMIN_TOKEN || '';
 const FEEDBACK_TYPES = ['功能建议', '问题反馈', '希望新增角色', '其他'];
 
 function clientIp(req) {
-  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return xff || req.socket?.remoteAddress || '';
+  return req.ip || '';
 }
 
 function sanitize(s, max) {
@@ -17,7 +22,7 @@ function sanitize(s, max) {
 }
 
 // 提交反馈（匿名访客）
-router.post('/feedback', (req, res) => {
+router.post('/feedback', async (req, res) => {
   const { type, content, contact } = req.body || {};
   const c = sanitize(content, 2000);
   if (c.length < 2) return res.status(400).json({ code: 40001, message: '反馈内容太短了' });
@@ -37,7 +42,7 @@ router.post('/feedback', (req, res) => {
     created_at: new Date().toISOString(),
   };
   db().feedbacks.push(fb);
-  saveDb();
+  await saveDb('feedbacks', fb);
   res.json({ code: 0, data: { id: fb.id, status: fb.status } });
 });
 
@@ -48,7 +53,7 @@ function adminOk(req) {
 }
 
 // 写信统计（需 FEEDBACK_ADMIN_TOKEN）：每日写信量 + 汇总（近 days 天，默认 14）
-router.get('/stats/letters', (req, res) => {
+router.get('/stats/letters', async (req, res) => {
   if (!adminOk(req)) {
     return res.status(403).json({ code: 40301, message: '无权访问（服务端未配置或 token 错误）' });
   }
@@ -76,7 +81,7 @@ router.get('/stats/letters', (req, res) => {
 });
 
 // 管理查询（需 FEEDBACK_ADMIN_TOKEN；?status=new 只看未处理）
-router.get('/feedback', (req, res) => {
+router.get('/feedback', async (req, res) => {
   if (!adminOk(req)) {
     return res.status(403).json({ code: 40301, message: '无权访问（服务端未配置或 token 错误）' });
   }
@@ -89,7 +94,7 @@ router.get('/feedback', (req, res) => {
 });
 
 // 标记已处理（管理员）
-router.patch('/feedback/:id', (req, res) => {
+router.patch('/feedback/:id', async (req, res) => {
   if (!adminOk(req)) {
     return res.status(403).json({ code: 40301, message: '无权访问' });
   }
@@ -97,12 +102,12 @@ router.patch('/feedback/:id', (req, res) => {
   if (!fb) return res.status(404).json({ code: 40401, message: '反馈不存在' });
   fb.status = req.body?.status === 'done' ? 'done' : 'new';
   fb.updated_at = new Date().toISOString();
-  saveDb();
+  await saveDb('feedbacks', fb);
   res.json({ code: 0, data: { id: fb.id, status: fb.status } });
 });
 
 // 信件管理（需 FEEDBACK_ADMIN_TOKEN）：列出全部信件，含分享链接
-router.get('/admin/letters', (req, res) => {
+router.get('/admin/letters', async (req, res) => {
   if (!adminOk(req)) {
     return res.status(403).json({ code: 40301, message: '无权访问（服务端未配置或 token 错误）' });
   }
@@ -144,7 +149,7 @@ router.get('/admin/letters', (req, res) => {
 });
 
 // 单封信详情（需 FEEDBACK_ADMIN_TOKEN）：完整原文 + 回信 + 分享链接
-router.get('/admin/letters/:id', (req, res) => {
+router.get('/admin/letters/:id', async (req, res) => {
   if (!adminOk(req)) {
     return res.status(403).json({ code: 40301, message: '无权访问' });
   }

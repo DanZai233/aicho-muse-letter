@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node server/src/index.js",
     "build:web": "cd web && npm run build",
-    "start": "NODE_ENV=production node server/src/index.js"
+    "start": "NODE_ENV=production node server/src/index.js",
+    "test": "node --test server/test/*.test.js"
   }
 }

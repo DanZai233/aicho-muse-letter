@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { LetterHeader, stopAllAudio } from '../components/ui.jsx';
+import { LetterHeader, stopAllAudio, playPreview } from '../components/ui.jsx';
+import { readStorage, writeStorage, removeStorage, readDraft } from '../storage.js';
 import { FONT_OPTIONS, getFont, setFont, fontFamily } from '../fonts.js';
 
 const POLISH_STYLES = [
@@ -14,18 +15,26 @@ const POLISH_STYLES = [
 
 export default function WritePage() {
   const nav = useNavigate();
+  const [params] = useSearchParams();
+  const [draft] = useState(readDraft);
+  const sent = useRef(false);
+  const [draftSource, setDraftSource] = useState(draft.from_letter || null);
+  const previewRequest = useRef(0);
+  const selectedId = useRef(draft.persona_id);
+  const [threadId, setThreadId] = useState(draft.thread_id || null);
+  const [newTopic, setNewTopic] = useState(params.get('new') === '1' || !!draft.new_topic);
   const [personas, setPersonas] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [penName, setPenName] = useState(() => localStorage.getItem('ml_pen') || '');
-  const [content, setContent] = useState(() => localStorage.getItem('ml_draft') || '');
+  const [penName, setPenName] = useState(() => draft.pen_name || readStorage('ml_pen'));
+  const [content, setContent] = useState(() => draft.content || readStorage('ml_draft'));
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
   const [previewing, setPreviewing] = useState(null);
-  const [customMode, setCustomMode] = useState(false);
-  const [customName, setCustomName] = useState('');
-  const [customTagline, setCustomTagline] = useState('');
-  const [customPersonality, setCustomPersonality] = useState('');
-  const [customVoice, setCustomVoice] = useState(null);
+  const [customMode, setCustomMode] = useState(draft.custom_mode || false);
+  const [customName, setCustomName] = useState(draft.custom_name || '');
+  const [customTagline, setCustomTagline] = useState(draft.custom_tagline || '');
+  const [customPersonality, setCustomPersonality] = useState(draft.custom_personality || '');
+  const [customVoice, setCustomVoice] = useState(draft.custom_voice || null);
   const [libOpen, setLibOpen] = useState(false);
   const [libQuery, setLibQuery] = useState('');
   const [libResults, setLibResults] = useState([]);
@@ -35,6 +44,8 @@ export default function WritePage() {
   const [polishResult, setPolishResult] = useState('');
   const [polishOpen, setPolishOpen] = useState(false);
   const [personaQuery, setPersonaQuery] = useState('');
+  const [personasRetry, setPersonasRetry] = useState(0);
+  const searchRequest = useRef(null);
   const [personasLoading, setPersonasLoading] = useState(true);
   const [fontId, setFontId] = useState(() => getFont().id);
 
@@ -43,62 +54,85 @@ export default function WritePage() {
     setFont(id);
   }
 
-  // 草稿自动保存（防抖）+ 笔名记忆
+  // Save the complete draft immediately, including recipient and thread context.
   useEffect(() => {
-    const t = setTimeout(() => {
-      try {
-        if (content.trim()) localStorage.setItem('ml_draft', content);
-        else localStorage.removeItem('ml_draft');
-        if (penName.trim()) localStorage.setItem('ml_pen', penName);
-        else localStorage.removeItem('ml_pen');
-      } catch { /* 隐私模式忽略 */ }
-    }, 500);
-    return () => clearTimeout(t);
-  }, [content, penName]);
+    if (sent.current) return;
+    writeStorage('ml_draft_v2', JSON.stringify({ content, pen_name: penName, persona_id: selected?.id || selectedId.current,
+      custom_mode: customMode, custom_name: customName, custom_tagline: customTagline,
+      custom_personality: customPersonality, custom_voice: customVoice, thread_id: threadId, new_topic: newTopic, from_letter: draftSource }));
+    writeStorage('ml_pen', penName);
+  }, [content, penName, selected, customMode, customName, customTagline, customPersonality, customVoice, threadId, newTopic, draftSource]);
 
   useEffect(() => {
-    api.personas().then(d => {
+    const from = params.get('from');
+    if (!from || from === draftSource) return;
+    setNewTopic(params.get('new') === '1');
+    const controller = new AbortController();
+    api.letter(from, controller.signal).then(({ letter }) => {
+      setDraftSource(from);
+      setThreadId(letter.thread_id);
+      setPenName(letter.pen_name);
+      selectedId.current = letter.persona.id;
+      setSelected(letter.persona);
+      if (letter.persona_custom) {
+        setCustomMode(true);
+        setCustomName(letter.persona_custom.name);
+        setCustomTagline(letter.persona_custom.tagline);
+        setCustomPersonality((letter.persona_custom.personality || []).join('，'));
+        setCustomVoice({ id: letter.persona_custom.voice_id, title: letter.persona_custom.voice_name });
+      } else setCustomMode(false);
+    }).catch(e => { if (e.name !== 'AbortError') setErr(e.message); });
+    return () => controller.abort();
+  }, [params]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setPersonasLoading(true);
+    api.personas(controller.signal).then(d => {
+      if (controller.signal.aborted) return;
       const list = d.list || [];
       setPersonas(list);
-      const elysia = list.find(p => p.id === 'preset-elysia') || list[0];
-      if (elysia) setSelected(elysia);
-    }).catch(e => setErr('对象列表加载失败：' + e.message)).finally(() => setPersonasLoading(false));
-    return () => stopAllAudio();
-  }, []);
+      const elysia = list.find(p => p.id === selectedId.current) || list.find(p => p.id === 'preset-elysia') || list[0];
+      if (elysia) setSelected(prev => prev || elysia);
+    }).catch(e => { if (!controller.signal.aborted) setErr('对象列表加载失败：' + e.message); }).finally(() => { if (!controller.signal.aborted) setPersonasLoading(false); });
+    return () => { controller.abort(); searchRequest.current?.abort(); previewRequest.current++; stopAllAudio(); };
+  }, [personasRetry]);
 
   async function onPreview(p) {
     if (!p.voice_id) return;
+    const ticket = ++previewRequest.current;
+    stopAllAudio();
     setPreviewing(p.id);
     try {
       const d = await api.previewVoice({ persona_name: p.name, voice_id: p.voice_id });
-      stopAllAudio();
-      const a = new Audio(d.audio_url);
-      a.play().catch(() => {});
-      setTimeout(() => a.pause(), 12000);
+      if (ticket !== previewRequest.current) return;
+      await playPreview(d.audio_url);
     } catch (e) {
-      setErr('试听失败：' + e.message);
+      if (ticket === previewRequest.current) setErr('试听失败：' + e.message);
     } finally {
-      setPreviewing(null);
+      if (ticket === previewRequest.current) setPreviewing(null);
     }
   }
 
   function playSample(item) {
     if (!item.sample_audio) return;
-    stopAllAudio();
-    const a = new Audio(item.sample_audio);
-    a.play().catch(() => {});
-    setTimeout(() => a.pause(), 12000);
+    previewRequest.current++;
+    playPreview(item.sample_audio).catch(e => setErr('试听失败：' + e.message));
   }
 
   async function doSearch(q) {
+    searchRequest.current?.abort();
+    const controller = new AbortController();
+    searchRequest.current = controller;
     setLibLoading(true);
     try {
-      const d = await api.librarySearch(q || '');
+      const d = await api.librarySearch(q || '', controller.signal);
+      if (controller.signal.aborted) return;
       setLibResults(d.list || []);
     } catch (e) {
-      setErr('音色广场搜索失败：' + e.message);
+      if (!controller.signal.aborted) setErr('音色广场搜索失败：' + e.message);
     } finally {
-      setLibLoading(false);
+      if (!controller.signal.aborted) setLibLoading(false);
     }
   }
 
@@ -117,11 +151,13 @@ export default function WritePage() {
 
   function applyPolish() {
     if (!polishResult) return;
+    if (polishResult.length > 3000) { setErr('润色结果超过 3000 字，请先调整后再采纳'); return; }
     setContent(polishResult);
     setPolishResult('');
   }
 
   async function send() {
+    if (sending) return;
     if (customMode) {
       if (!customName.trim()) { setErr('请填写写信对象的名字'); return; }
       if (!customVoice) { setErr('请先从音色广场选一个音色'); return; }
@@ -140,7 +176,13 @@ export default function WritePage() {
         voice_id: customMode ? customVoice.id : undefined,
         voice_name: customMode ? customVoice.title : undefined,
         letter_content: content.trim(),
+        reply_to: params.get('from') || undefined,
+        thread_id: threadId,
+        new_topic: newTopic,
       });
+      sent.current = true;
+      removeStorage('ml_draft');
+      removeStorage('ml_draft_v2');
       nav('/letter/' + d.id);
     } catch (e) {
       setErr(e.message);
@@ -177,16 +219,16 @@ export default function WritePage() {
               <div className="persona-scroll">
                 {personasLoading ? <p className="empty-hint">正在打开通讯录…</p> : null}
                 {!personasLoading && visiblePersonas.map(p => (
-                  <div key={p.id} className={'persona-row' + (selected?.id === p.id ? ' selected' : '')} onClick={() => setSelected(p)}>
+                  <div role="button" tabIndex={0} onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setSelected(p); } }} key={p.id} className={'persona-row' + (selected?.id === p.id ? ' selected' : '')} onClick={() => setSelected(p)}>
                     <span className="row-avatar" style={{ background: p.avatar_color || '#8b7d6b' }}>{p.name.slice(0, 1)}</span>
                     <span className="persona-row-main">
                       <span className="persona-row-name">{p.name}</span>
                       <span className="persona-row-tag">{p.tagline || ''}</span>
                     </span>
-                    {p.voice_id ? <button className="row-preview" onClick={(e) => { e.stopPropagation(); onPreview(p); }} title="试听声音">♪</button> : null}
+                    {p.voice_id ? <button className="row-preview" onClick={(e) => { e.stopPropagation(); onPreview(p); }} title="试听声音" aria-label={"试听" + p.name} disabled={previewing === p.id}>{previewing === p.id ? "…" : "♪"}</button> : null}
                   </div>
                 ))}
-                {visiblePersonas.length === 0 ? <p className="empty-hint">没有找到这个人</p> : null}
+                {!personasLoading && visiblePersonas.length === 0 ? <p className="empty-hint">没有找到这个人 <button className="mini-btn" onClick={() => { setErr(''); setPersonasRetry(n => n + 1); }}>重新加载通讯录</button></p> : null}
               </div>
               <div className="panel-foot">
                 {selected ? <p className="persona-bio">{selected.background || selected.tagline || ''}</p> : <p className="persona-bio">选一位收信人，把信写给 TA。</p>}
@@ -249,12 +291,13 @@ export default function WritePage() {
                 <>
                   <span className="strip-avatar" style={{ background: selected.avatar_color }}>{selected.name.slice(0, 1)}</span>
                   <span className="strip-name">{selected.name}</span>
-                  {selected.voice_id ? <button className="mini-btn" onClick={() => onPreview(selected)}>♪ 试听</button> : null}
+                  {selected.voice_id ? <button className="mini-btn" onClick={() => onPreview(selected)} disabled={previewing === selected.id}>♪ 试听</button> : null}
                 </>
               ) : <span className="strip-name">…</span>}
             </div>
           </div>
 
+          <label className="topic-choice"><input type="checkbox" checked={newTopic} onChange={e => setNewTopic(e.target.checked)} /> 开启新话题（不带入之前的往来）</label>
           <div className="pen-row">
             <label className="pen-label">落款笔名</label>
             <input className="pen-input" value={penName} maxLength={20} placeholder="你的笔名（可选）" onChange={e => setPenName(e.target.value)} />

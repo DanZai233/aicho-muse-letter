@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+
+test('JSON storage rolls back failed writes, persists deletions, and refuses corrupt input', async t => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'muse-json-test-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  process.env.DATA_DIR = dataDir;
+  delete process.env.MYSQL_HOST; delete process.env.DB_HOST;
+  const { initStorage, db, saveDb } = await import('../src/db.js');
+  await initStorage();
+  const letter = { id: 'a', visitor_id: 'owner', status: 'done' };
+  db().letters.push(letter);
+  await saveDb('letters', letter);
+  const filename = path.join(dataDir, 'letters.json');
+  assert.equal(JSON.parse(await readFile(filename)).letters[0].status, 'done');
+  await mkdir(filename + '.tmp');
+  letter.status = 'replying';
+  await assert.rejects(saveDb('letters', letter));
+  assert.equal(db().letters[0].status, 'done');
+  assert.equal(JSON.parse(await readFile(filename)).letters[0].status, 'done');
+  await rm(filename + '.tmp', { recursive: true });
+  const current = db().letters.pop();
+  await saveDb('letters', current, true);
+  assert.equal(JSON.parse(await readFile(filename)).letters.length, 0);
+  await writeFile(filename, '{corrupt');
+  await assert.rejects(initStorage(), SyntaxError);
+  assert.equal(await readFile(filename, 'utf8'), '{corrupt');
+});

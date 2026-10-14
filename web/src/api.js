@@ -1,39 +1,55 @@
+import { readStorage, writeStorage } from './storage.js';
 // 信笺 API 封装 + 访客标识
 export function visitorId() {
-  let v = localStorage.getItem('ml_visitor');
+  let v = readStorage('ml_visitor');
   if (!v) {
     v = 'v_' + crypto.randomUUID();
-    localStorage.setItem('ml_visitor', v);
+    writeStorage('ml_visitor', v);
   }
   return v;
 }
 
 async function req(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', 'X-Visitor-Id': visitorId(), ...(opts.headers || {}) };
-  const r = await fetch('/api/v1' + path, { ...opts, headers });
-  let data;
-  try { data = await r.json(); } catch { data = { code: -1, message: '响应解析失败' }; }
-  if (!r.ok || (data.code && data.code !== 0)) {
-    throw new Error(data.message || ('请求失败 ' + r.status));
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (opts.signal?.aborted) abort();
+  opts.signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(abort, 210000);
+  try {
+    const response = await fetch('/api/v1' + path, { ...opts, headers, signal: controller.signal });
+    let data;
+    try { data = await response.json(); }
+    catch (error) {
+      if (error.name === 'AbortError') throw error;
+      throw new Error('响应解析失败，请重试');
+    }
+    if (!response.ok || (data.code && data.code !== 0)) throw new Error(data.message || ('请求失败 ' + response.status));
+    return data.data;
+  } catch (error) {
+    if (error.name === 'AbortError' && !opts.signal?.aborted) throw new Error('请求超时，请重试');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    opts.signal?.removeEventListener('abort', abort);
   }
-  return data.data;
 }
 
 export const api = {
-  personas: () => req('/letters/personas'),
+  personas: (signal) => req('/letters/personas', { signal }),
   sendLetter: (body) => req('/letters', { method: 'POST', body: JSON.stringify(body) }),
-  letter: (id) => req('/letters/' + id),
-  letters: () => req('/letters'),
+  letter: (id, signal) => req('/letters/' + id, { signal }),
+  letters: (query = {}, signal) => req('/letters?' + new URLSearchParams(query), { signal }),
   regen: (id) => req('/letters/' + id + '/regen', { method: 'POST' }),
   shareOn: (id) => req('/letters/' + id + '/share', { method: 'POST' }),
   shareOff: (id) => req('/letters/' + id + '/share', { method: 'DELETE' }),
   previewVoice: (body) => req('/letters/preview-voice', { method: 'POST', body: JSON.stringify(body) }),
-  librarySearch: (q) => req('/letters/library/search?q=' + encodeURIComponent(q)),
+  librarySearch: (q, signal) => req('/letters/library/search?q=' + encodeURIComponent(q), { signal }),
   regenAudio: (id, index) => req('/letters/' + id + '/regen-audio', { method: 'POST', body: JSON.stringify({ index }) }),
-  synthAudio: (id, index) => req('/letters/' + id + '/audio/' + index, { method: 'POST' }),
-  shareSynthAudio: (token, index) => req('/share/' + token + '/audio/' + index, { method: 'POST' }),
+  synthAudio: (id, index, signal) => req('/letters/' + id + '/audio/' + index, { method: 'POST', signal }),
+  shareSynthAudio: (token, index, signal) => req('/share/' + token + '/audio/' + index, { method: 'POST', signal }),
   polish: (text, style) => req('/letters/polish', { method: 'POST', body: JSON.stringify({ text, style }) }),
   deleteLetter: (id) => req('/letters/' + id, { method: 'DELETE' }),
-  shared: (token) => req('/share/' + token),
+  shared: (token, signal) => req('/share/' + token, { signal }),
   submitFeedback: (body) => req('/feedback', { method: 'POST', body: JSON.stringify(body) }),
 };

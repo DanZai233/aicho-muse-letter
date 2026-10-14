@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { api } from '../api.js';
 
 const TYPES = ['功能建议', '问题反馈', '希望新增角色', '其他'];
@@ -12,6 +12,8 @@ export default function FeedbackWidget() {
   const [err, setErr] = useState('');
   const [done, setDone] = useState(false);
   const timerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   function close() {
     setOpen(false);
@@ -48,7 +50,7 @@ export default function FeedbackWidget() {
       </button>
       {open ? (
         <div className="feedback-mask" onClick={close}>
-          <div className="feedback-card" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-label="意见反馈" className="feedback-card" onClick={e => e.stopPropagation()}>
             {done ? (
               <div className="feedback-done">
                 <span className="feedback-done-icon">💌</span>

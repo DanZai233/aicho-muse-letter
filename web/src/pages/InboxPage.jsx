@@ -1,33 +1,44 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 
 const STATUS_LABEL = { writing: '寄送中', replying: '回信中', done: '已回信', error: '回信失败' };
 
 export default function InboxPage() {
+  const [params, setParams] = useSearchParams();
+  const persona = params.get('persona') || '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const [total, setTotal] = useState(0);
+  const [personas, setPersonas] = useState([]);
+  const [retry, setRetry] = useState(0);
   const [letters, setLetters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
   useEffect(() => {
     let timer = null;
+    const controller = new AbortController();
+    setLoading(true);
     async function load() {
       try {
-        const d = await api.letters();
+        const d = await api.letters({ page, page_size: 20, persona }, controller.signal);
+        if (controller.signal.aborted) return;
+        setTotal(d.total);
+        setPersonas(d.personas || []);
         setLetters(d.list || []);
         setErr('');
         // 有未完成信件则继续轮询，全部完成后停止
         const pending = (d.list || []).some(l => l.status === 'writing' || l.status === 'replying');
         if (pending) timer = setTimeout(load, 3000);
       } catch (e) {
-        setErr(e.message);
+        if (!controller.signal.aborted) setErr(e.message);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     load();
-    return () => clearTimeout(timer);
-  }, []);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [page, persona, retry]);
 
   async function remove(id, e) {
     e.preventDefault();
@@ -35,7 +46,8 @@ export default function InboxPage() {
     if (!window.confirm('确定要删除这封信吗？删除后无法恢复。')) return;
     try {
       await api.deleteLetter(id);
-      setLetters(prev => prev.filter(l => l.id !== id));
+      if (letters.length === 1 && page > 1) setParams({ persona, page: String(page - 1) });
+      else setRetry(n => n + 1);
     } catch (err) {
       alert('删除失败：' + err.message);
     }
@@ -60,10 +72,13 @@ export default function InboxPage() {
       <main className="inbox-main">
         <div className="inbox-head">
           <p className="inbox-desc">写过的信都收在这里，可以反复回看、重新听，也可以分享给朋友。</p>
-          {letters.length ? <span className="inbox-count">{letters.length} 封信</span> : null}
+          {total ? <span className="inbox-count">{total} 封信</span> : null}
         </div>
+        <label className="conversation-filter">往来对象 <select value={persona} onChange={e => setParams(e.target.value ? { persona: e.target.value } : {})}>
+          <option value="">全部信件</option>{personas.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select></label>
         {loading ? <p className="empty-hint">正在打开信箱…</p> : null}
-        {err ? <p className="form-err">{err}</p> : null}
+        {err ? <p className="form-err">{err} <button className="ghost-btn" onClick={() => setRetry(n => n + 1)}>重试</button></p> : null}
         {!loading && !err && letters.length === 0 ? (
           <div className="empty-box">
             <span className="empty-icon">🕊️</span>
@@ -86,11 +101,16 @@ export default function InboxPage() {
                   <span className={'row-status ' + l.status}>{STATUS_LABEL[l.status] || ''}</span>
                   <span className="row-time">{fmt(l.created_at)}</span>
                 </span>
-                <button className="row-del" title="删除这封信" onClick={(e) => remove(l.id, e)}>✕</button>
               </Link>
+              <button className="row-del" title="删除这封信" aria-label="删除这封信" onClick={(e) => remove(l.id, e)}>✕</button>
             </li>
           ))}
         </ul>
+        {total > 20 ? <nav className="letter-actions" aria-label="信箱分页">
+          <button className="ghost-btn" disabled={page <= 1} onClick={() => setParams({ persona, page: String(page - 1) })}>上一页</button>
+          <span>第 {page} / {Math.ceil(total / 20)} 页</span>
+          <button className="ghost-btn" disabled={page * 20 >= total} onClick={() => setParams({ persona, page: String(page + 1) })}>下一页</button>
+        </nav> : null}
       </main>
     </div>
   );

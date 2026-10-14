@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { api, visitorId } from '../api.js';
 
 // 全局共享播放器：模块级单例，一次只播一段。
 // 页面各自 new Audio() 会导致 stop/pause 停不住真正在播的实例，
@@ -8,8 +7,13 @@ import { api, visitorId } from '../api.js';
 const playerAudio = new Audio();
 let playerPlaying = false;
 
+let playbackEpoch = 0;
 export function stopAllAudio() {
+  playbackEpoch++;
   playerAudio.pause();
+  playerAudio.onended = null;
+  playerAudio.onerror = null;
+  playerAudio.ontimeupdate = null;
   playerAudio.removeAttribute('src');
   playerAudio.load();
   playerPlaying = false;
@@ -17,12 +21,12 @@ export function stopAllAudio() {
 
 // 段落播放 hook：共享同一播放器实例，支持暂停/恢复、进度条、播完回调（自动连播）。
 // play(index, url) —— 同一段再次调用会暂停/恢复；不同段则打断并立即播放新段。
-export function useParagraphPlayer({ onEnded } = {}) {
+export function useParagraphPlayer({ onEnded, onError } = {}) {
   const [playing, setPlaying] = useState(null); // 当前播放段落 index
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState(null); // { i, pct }
-  const cbRef = useRef({ onEnded });
-  cbRef.current = { onEnded };
+  const cbRef = useRef({ onEnded, onError });
+  cbRef.current = { onEnded, onError };
 
   useEffect(() => {
     return () => { stopAllAudio(); };
@@ -53,14 +57,16 @@ export function useParagraphPlayer({ onEnded } = {}) {
     setPaused(false);
     setProgress({ i: index, pct: 0 });
     playerPlaying = true;
+    const epoch = playbackEpoch;
     playerAudio.src = url;
     playerAudio.play().catch((e) => {
       // 主动打断（暂停/切段）引发的 AbortError 属预期，不重置播放状态
-      if (e && e.name === 'AbortError') return;
+      if (epoch !== playbackEpoch || (e && e.name === 'AbortError')) return;
       playerPlaying = false;
       setPlaying(null);
       setPaused(false);
       setProgress(null);
+      cbRef.current.onError?.('声音暂时无法播放，请重试');
     });
     playerAudio.ontimeupdate = () => {
       if (playerAudio.duration > 0) {
@@ -75,6 +81,7 @@ export function useParagraphPlayer({ onEnded } = {}) {
       cbRef.current.onEnded?.(index);
     };
     playerAudio.onerror = () => {
+      cbRef.current.onError?.('声音加载失败，请重试');
       playerPlaying = false;
       setPlaying(null);
       setPaused(false);
@@ -140,4 +147,82 @@ export function Spinner({ label }) {
       <span className="spinner-label">{label || '正在生成…'}</span>
     </div>
   );
+}
+
+// Preview and letter playback share the same audio instance.
+export function playPreview(url) {
+  stopAllAudio();
+  playerAudio.src = url;
+  playerAudio.ontimeupdate = null;
+  playerAudio.onended = null;
+  playerAudio.onerror = null;
+  return playerAudio.play();
+}
+
+export function useLetterPlayback({ sourceId, letter, setLetter, synthesize, onError }) {
+  const latest = useRef({ letter, setLetter, synthesize, onError });
+  latest.current = { letter, setLetter, synthesize, onError };
+  const request = useRef(null);
+  const sequence = useRef(0);
+  const continuous = useRef(false);
+  const [readingAll, setReadingAll] = useState(false);
+  const [synthLoading, setSynthLoading] = useState(null);
+  const player = useParagraphPlayer({ onError: message => {
+    continuous.current = false;
+    setReadingAll(false);
+    latest.current.onError?.(message);
+  }, onEnded: i => {
+    if (continuous.current && latest.current.letter?.reply?.[i + 1]) playPara(i + 1, undefined, true);
+    else { continuous.current = false; setReadingAll(false); }
+  } });
+  function stop() {
+    sequence.current++;
+    request.current?.abort();
+    continuous.current = false;
+    setReadingAll(false);
+    setSynthLoading(null);
+    player.play(-1, null);
+  }
+  useEffect(() => {
+    stop();
+    return () => {
+      sequence.current++;
+      request.current?.abort();
+      continuous.current = false;
+      stopAllAudio();
+    };
+  }, [sourceId]);
+  async function playPara(i, url, keepContinuous = false) {
+    if (!keepContinuous) { continuous.current = false; setReadingAll(false); }
+    const ticket = ++sequence.current;
+    request.current?.abort();
+    const paragraph = latest.current.letter?.reply?.[i];
+    if (!paragraph) return;
+    url ||= paragraph.audio_url;
+    if (url) { setSynthLoading(null); player.play(i, url); return; }
+    const controller = new AbortController();
+    request.current = controller;
+    player.play(-1, null);
+    setSynthLoading(i);
+    try {
+      const result = await latest.current.synthesize(i, controller.signal);
+      if (ticket !== sequence.current) return;
+      latest.current.setLetter(prev => prev ? { ...prev, reply: prev.reply.map((p, j) => j === i ? { ...p, audio_url: result.audio_url } : p) } : prev);
+      player.play(i, result.audio_url);
+    } catch (error) {
+      if (ticket !== sequence.current || error.name === 'AbortError') return;
+      continuous.current = false;
+      setReadingAll(false);
+      latest.current.onError?.('语音生成失败：' + error.message);
+    } finally {
+      if (ticket === sequence.current) setSynthLoading(null);
+    }
+  }
+  function readAll() {
+    stop();
+    continuous.current = true;
+    setReadingAll(true);
+    playPara(0, undefined, true);
+  }
+  return { ...player, playPara, stop, readAll, readingAll, synthLoading };
 }

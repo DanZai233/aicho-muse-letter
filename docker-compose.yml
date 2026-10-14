@@ -28,12 +28,20 @@ services:
         condition: service_healthy
     environment:
       PORT: 3004
+      GENERATION_CONCURRENCY: ${GENERATION_CONCURRENCY:-3}
+      GENERATION_QUEUE_SIZE: ${GENERATION_QUEUE_SIZE:-50}
+      REQUESTS_PER_HOUR: ${REQUESTS_PER_HOUR:-30}
+      AUDIO_RETENTION_DAYS: ${AUDIO_RETENTION_DAYS:-30}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-aicho_muse_letter}
       MYSQL_USER: ${MYSQL_USER:-letter}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-letter123}
       MUSE_BASE_URL: ${MUSE_BASE_URL:-http://aicho-muse-app:3001/api/v1/letter}
+      # 管理接口鉴权：muse 后台代理调用信件管理/反馈统计接口时使用（与 muse 的 LETTER_FEEDBACK_TOKEN 同值）
+      FEEDBACK_ADMIN_TOKEN: ${FEEDBACK_ADMIN_TOKEN:-}
     ports:
       - "${APP_PORT:-3004}:3004"
     volumes:
