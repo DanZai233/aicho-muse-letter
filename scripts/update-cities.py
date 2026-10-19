@@ -43,5 +43,5 @@ for province,cities in hmt.items():
             add(label,label,{'香港':[22.3,114.2],'澳门':[22.2,113.5]}.get(region))
 values=[r['value'] for r in records]
 assert len(values)==len(set(values)), 'Ambiguous values in source data'
-(root/'server/src/data/china-cities.json').write_text(json.dumps(records,ensure_ascii=False,separators=(',',':'))+'\n')
+(root/'server/src/city-data.json').write_text(json.dumps(records,ensure_ascii=False,separators=(',',':'))+'\n')
 print(f'Wrote {len(records)} locations, {sum(r["coordinates"] is not None for r in records)} with coordinates')

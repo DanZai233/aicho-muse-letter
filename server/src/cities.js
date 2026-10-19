@@ -8,7 +8,7 @@ const LEGACY_CITIES = {
   '香港': [22.3,114.2], '东京': [35.7,139.7], '新加坡': [1.4,103.8], '伦敦': [51.5,-.1],
   '巴黎': [48.9,2.4], '纽约': [40.7,-74], '悉尼': [-33.9,151.2], '洛杉矶': [34.1,-118.2],
 };
-const records=JSON.parse(fs.readFileSync(new URL('./data/china-cities.json',import.meta.url),'utf8'));
+const records=JSON.parse(fs.readFileSync(new URL('./city-data.json',import.meta.url),'utf8'));
 export const CITIES={...Object.fromEntries(records.filter(c=>c.coordinates).map(c=>[c.value,c.coordinates])),...LEGACY_CITIES};
 const legacy=Object.keys(LEGACY_CITIES).map(value=>({value,label:records.find(c=>c.value===value)?.label||value,coordinates:LEGACY_CITIES[value]}));
 const normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[\s/·'’-]/g,'');
