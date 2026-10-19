@@ -1,3 +1,4 @@
+import { mailAllowance } from './postal-quota.js';
 import crypto from 'node:crypto';
 import { fail, distance, travelHours, blocked } from './paper.js';
 import { uuid } from './db.js';
@@ -24,6 +25,8 @@ export function claim(s,who,now=Date.now()) {
  p.active_at=new Date(now).toISOString();p.receive_opt_in=true;
  const existing=s.letters.find(l=>l.to===who&&!l.cancelled&&!l.opened_at&&l.sealed&&!blocked(s,l.from,who));
  if(existing)return {id:existing.id,already_waiting:true};
+ const allowance=mailAllowance(s,who,now);
+ if(!allowance.allowed)return {id:null,reason:allowance.reason};
  if(p.paused)fail('请先在寄信名片中恢复随机来信',409);
  const outstanding=s.routes.filter(r=>r.members.includes(who)&&r.initiator!==who&&r.status!=='closed'&&!r.first_reply_used);
  if(outstanding.length>=2)return {id:null,reason:'先给已有的相遇回一封信，再迎接新朋友吧。'};
@@ -33,7 +36,7 @@ export function claim(s,who,now=Date.now()) {
  if(!l)return {id:null,reason:'邮筒里暂时没有合适的来信。你可以先写一封，也可以过会儿再来。'};
  const sender=s.profiles.find(p=>p.id===l.from);l.to=who;l.distance=distance(sender.city,p.city);
  // The time spent waiting in the post office is part of the initial journey.
- l.arrives_at=new Date(Math.max(now,Date.parse(l.sent_at)+travelHours(l.distance)*3600000)).toISOString();l.sealed=true;
- const r={id:uuid(),members:[l.from,who],initiator:l.from,first_reply_used:false,status:'invited',created_at:new Date(now).toISOString()};
+ l.arrives_at=new Date(Math.max(now,Date.parse(l.sent_at)+travelHours(l.distance)*3600000)).toISOString();l.sealed=true;l.received_at=new Date(now).toISOString();
+ const r={id:uuid(),initial_letter_id:l.id,members:[l.from,who],initiator:l.from,first_reply_used:false,status:'invited',created_at:new Date(now).toISOString()};
  s.routes.push(r);l.route_id=r.id;return {id:l.id,already_waiting:false};
 }

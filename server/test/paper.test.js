@@ -119,3 +119,18 @@ test('checking an empty mailbox opts a new reader into future matching without r
  assert.equal((await call('/check-mail','b',{})).data.id,sent.data.id);
  assert.equal((await call('','b')).data.routes.length,1);
 });
+
+test('concurrent mailbox checks cannot claim a second daily letter until the first receives a sent reply',async t=>{
+ const s=seed()[0];s.routes=[];s.letters=['a','c'].map(id=>({id:'daily-'+id,from:'test-user-'+id,content,key:'daily-'+id,sealed:true,sent_at:new Date(Date.now()-3*86400000).toISOString()}));
+ const app=await fixture({paper:[s]});t.after(()=>app.close());
+ const call=async(path,body)=>{const r=await fetch(app.url+'/api/v1/paper'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer test-user-b'},body:body?JSON.stringify(body):undefined});return {status:r.status,...await r.json()};};
+ const [a,b]=await Promise.all([call('/check-mail',{}),call('/check-mail',{})]);assert.equal(a.data.id,b.data.id);
+ await call('/letters/'+a.data.id+'/open',{});
+ const denied=await call('/check-mail',{});assert.equal(denied.data.id,null);assert.match(denied.data.reason,/回复/);
+ let inbox=(await call('')).data;assert.equal(inbox.mail_allowance.received,1);assert.equal(inbox.mail_allowance.needs_reply,true);
+ const initial=inbox.letters.find(l=>l.id===a.data.id);
+ const reply=await call('/letters',{route_id:initial.route_id,content,key:'quota-first-reply'});assert.equal(reply.status,200);
+ const picked=await call('/check-mail',{});assert.ok(picked.data.id);assert.notEqual(picked.data.id,initial.id);
+ inbox=(await call('')).data;assert.equal(inbox.mail_allowance.received,2);assert.equal(inbox.mail_allowance.allowed,false);
+ const second=inbox.letters.find(l=>l.id===picked.data.id);await call('/routes/'+second.route_id+'/close',{});assert.match((await call('/check-mail',{})).data.reason,/两封/);
+});

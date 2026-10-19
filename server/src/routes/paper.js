@@ -1,3 +1,4 @@
+import { mailAllowance } from '../postal-quota.js';
 import { wrapping, claim, ENVELOPES, STAMPS, PICTURES, CARDS, PLACES } from '../postal.js';
 import { createRateLimiter } from '../tasks.js';
 import { Router } from 'express';
@@ -26,7 +27,7 @@ router.get('/',wrap(async(req,res)=>{
   const peer=s.profiles.find(p=>p.id===r.members.find(x=>x!==who));
   return {id:r.id,status:r.status,peer:{name:peer?.name||'远方的朋友',city:peer?.public_city?peer.city:undefined},first_reply_used:r.first_reply_used};
  });
- send(res,{user_id:who,profile:{name:p.name,city:p.city,public_city:p.public_city,language:p.language,topics:p.topics,paused:p.paused,reader:p.reader},routes,
+ send(res,{user_id:who,mail_allowance:mailAllowance(s,who),profile:{name:p.name,city:p.city,public_city:p.public_city,language:p.language,topics:p.topics,paused:p.paused,reader:p.reader},routes,
  letters:s.letters.filter(l=>(l.from===who||l.to===who)&&!(l.to===who&&blocked(s,l.from,who))).map(l=>viewLetter(s,l,who)).reverse()});
 }));
 router.post('/check-mail',wrap(async(req,res)=>send(res,await mutate(s=>claim(s,req.paperId)))));
@@ -84,7 +85,7 @@ router.post('/letters/:id/repost',wrap(async(req,res)=>send(res,await mutate(s=>
  if(l.reposted)fail('这封信已经重新寄出',409);
  if(s.letters.filter(x=>x.from===who&&!x.cancelled&&(!x.route_id||s.routes.find(y=>y.id===x.route_id)?.status==='invited')).length>2)fail('请先等候已有相遇',409);
  r.status='closed';l.reposted=true;l.cancelled=true;
- const copy={...l,id:uuid(),key:uuid(),to:null,route_id:null,sent_at:new Date().toISOString(),arrives_at:null,cancelled:false,reposted:false,distance:null,opened_at:null};s.letters.push(copy);match(s);return {id:copy.id};
+ const copy={...l,id:uuid(),key:uuid(),to:null,route_id:null,sent_at:new Date().toISOString(),arrives_at:null,cancelled:false,reposted:false,distance:null,opened_at:null,received_at:null};s.letters.push(copy);match(s);return {id:copy.id};
 }))));
 router.post('/letters/:id/withdraw',wrap(async(req,res)=>send(res,await mutate(s=>{
  const l=s.letters.find(l=>l.id===req.params.id&&l.from===req.paperId);if(!l)fail('信件不存在',404);

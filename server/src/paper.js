@@ -1,3 +1,4 @@
+import { mailAllowance } from './postal-quota.js';
 import crypto from 'node:crypto';
 import { db, saveDb, uuid } from './db.js';
 
@@ -49,7 +50,7 @@ export function paragraphs(text) { return text.split(/\n\s*\n/).flatMap(p=>p.tri
 export function match(s,now=Date.now()) {
   for(const l of s.letters.filter(l=>!l.to&&!l.cancelled)) {
     const sender=s.profiles.find(p=>p.id===l.from);if(!sender)continue;
-    const candidates=s.profiles.filter(p=>p.id!==sender.id&&!p.paused&&p.language===sender.language&&!blocked(s,sender.id,p.id)
+    const candidates=s.profiles.filter(p=>mailAllowance(s,p.id,now).allowed&&p.id!==sender.id&&!p.paused&&p.language===sender.language&&!blocked(s,sender.id,p.id)
       && (p.receive_opt_in||s.letters.some(x=>x.from===p.id&&!x.cancelled))
       && now-Date.parse(p.active_at)<30*86400000
       && !s.routes.some(r=>r.members.includes(sender.id)&&r.members.includes(p.id))
@@ -57,8 +58,8 @@ export function match(s,now=Date.now()) {
     candidates.sort((a,b)=>b.topics.filter(t=>sender.topics.includes(t)).length-a.topics.filter(t=>sender.topics.includes(t)).length);
     const best=candidates.filter(p=>p.topics.filter(t=>sender.topics.includes(t)).length===(candidates[0]?.topics.filter(t=>sender.topics.includes(t)).length));
     const recipient=best.length?best[crypto.randomInt(best.length)]:null;if(!recipient)continue;
-    l.to=recipient.id;l.distance=distance(sender.city,recipient.city);l.arrives_at=new Date(now+travelHours(l.distance)*3600000).toISOString();
-    const r={id:uuid(),members:[sender.id,recipient.id],initiator:sender.id,first_reply_used:false,status:'invited',created_at:new Date(now).toISOString()};
+    l.to=recipient.id;l.received_at=new Date(now).toISOString();l.distance=distance(sender.city,recipient.city);l.arrives_at=new Date(now+travelHours(l.distance)*3600000).toISOString();
+    const r={id:uuid(),initial_letter_id:l.id,members:[sender.id,recipient.id],initiator:sender.id,first_reply_used:false,status:'invited',created_at:new Date(now).toISOString()};
     s.routes.push(r);l.route_id=r.id;
   }
 }
