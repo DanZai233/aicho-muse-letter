@@ -4,6 +4,7 @@ import AccountNav from './components/AccountNav.jsx';
 import FeedbackWidget from './components/FeedbackWidget.jsx';
 
 const ConnectPage = lazy(() => import('./pages/ConnectPage.jsx'));
+const PaperSentPage = lazy(() => import('./pages/PaperSentPage.jsx'));
 const PaperPage = lazy(() => import('./pages/PaperPage.jsx'));
 
 const WritePage = lazy(() => import('./pages/WritePage.jsx'));
@@ -18,6 +19,7 @@ export default function App() {
       <Suspense fallback={<p className="empty-hint">正在展开信笺…</p>}>
         <Routes>
           <Route path="/connect" element={<ConnectPage />} />
+          <Route path="/paper/sent" element={<PaperSentPage />} />
           <Route path="/paper" element={<PaperPage />} />
           <Route path="/" element={<WritePage />} />
           <Route path="/inbox" element={<InboxPage />} />

@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import sharp from 'sharp';
+import {fixture} from './fixture.js';
+test('writing modes use the outgoing正文 and private uploaded postcard follows sealed letter permissions',async t=>{
+ const now=new Date().toISOString(),body='今天在路上看到一只可爱的猫，想把这点快乐也分享给你。';
+ const profile=id=>({id:'test-user-'+id,name:id,city:'北京',language:'中文',paused:true,blocked:[],active_at:now});
+ const app=await fixture({paper:[{id:'postoffice',profiles:['a','b','c'].map(profile),routes:[{id:'r',members:['test-user-a','test-user-b'],initiator:'test-user-a',first_reply_used:false,status:'invited',created_at:now}],letters:[{id:'incoming',from:'test-user-a',to:'test-user-b',route_id:'r',content:body,sent_at:now,arrives_at:now,sealed:true,opened_at:now}],reports:[]}]});t.after(()=>app.close());
+ async function call(path,who='a',data){const r=await fetch(app.url+'/api/v1/paper'+path,{method:data===undefined?'GET':'POST',headers:{Authorization:'Bearer test-user-'+who,'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});return {status:r.status,data:(await r.json()).data};}
+ assert.equal((await call('/assist','a',{mode:'polish',content:body})).status,200);
+ assert.equal(app.state.assists.at(-1).content,body);assert.equal(app.state.assists.at(-1).incoming,'');assert.equal(app.state.replies.length,0);
+ assert.equal((await call('/assist','a',{mode:'polish',intent:'帮我写一封信'})).status,400);
+ await call('/assist','b',{mode:'draft',intent:'分享最近遇到的小猫',letter_id:'incoming'});assert.equal(app.state.assists.at(-1).incoming,body);
+ const image=await sharp({create:{width:10,height:10,channels:3,background:'red'}}).png().toBuffer();
+ const upload=async (bytes,who='a')=>fetch(app.url+'/api/v1/paper/images',{method:'POST',headers:{Authorization:'Bearer test-user-'+who,'Content-Type':'image/png'},body:bytes});
+ assert.equal((await upload(Buffer.from('bad image'))).status,400);
+ const uploaded=await upload(image);assert.equal(uploaded.status,200);const id=(await uploaded.json()).data.id;
+ const get=who=>fetch(app.url+'/api/v1/paper/images/'+id,{headers:{Authorization:'Bearer test-user-'+who}});
+ assert.equal((await get('a')).status,200);assert.equal((await get('b')).status,404);assert.equal((await get('c')).status,404);
+ assert.equal((await call('/letters','b',{key:'stolen',content:body,wrapping:{image:id}})).status,400);
+ const sent=await call('/letters','a',{key:'image-letter',content:body,wrapping:{image:id}});assert.equal(sent.status,200);
+ assert.equal((await call('','a')).data.letters.find(l=>l.id===sent.data.id).wrapping.image,id);
+ assert.equal((await call('/letters/'+sent.data.id+'/withdraw','b',{})).status,404);
+ assert.equal((await call('/letters/'+sent.data.id+'/withdraw','a',{})).status,200);
+ const other=(await (await upload(image,'b')).json()).data.id;
+ const reply=await call('/letters','b',{key:'reply-image',route_id:'r',content:body,wrapping:{image:other}});assert.equal(reply.status,200);
+ const access=()=>fetch(app.url+'/api/v1/paper/images/'+other,{headers:{Authorization:'Bearer test-user-a'}});
+ assert.equal((await access()).status,404);
+ assert.equal((await call('','a')).data.letters.find(l=>l.id===reply.data.id).wrapping.image,undefined);
+ await call('/letters/'+reply.data.id+'/open','a',{});assert.equal((await access()).status,200);
+ await call('/routes/r/block','a',{});assert.equal((await access()).status,404);
+});

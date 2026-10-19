@@ -160,3 +160,5 @@ export async function museAccount(endpoint, { token, body } = {}) {
   if(!response.ok||result.code!==0)throw Object.assign(new Error(result.message||'Muse 账号服务暂不可用'),{status:response.status===401||response.status===403?401:502});
   return result.data;
 }
+
+export function assistLetter(body){return muse('/write-assist',{method:'POST',body,timeout:120000});}

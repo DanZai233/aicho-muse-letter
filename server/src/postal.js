@@ -11,7 +11,8 @@ export const PLACES=['晚风邮局','月亮街七号','云边小站','山海之�
 export function wrapping(input={}) {
  if(!input||typeof input!=='object'||Array.isArray(input))fail('信封附件选项无效');
  const pick=(key,values,fallback)=>{if(input[key]!==undefined&&!values.includes(input[key]))fail('信封附件选项无效');return input[key]??fallback;};
- return {envelope:pick('envelope',ENVELOPES,'linen'),stamp:pick('stamp',STAMPS,'moon'),picture:pick('picture',PICTURES,''),card:pick('card',CARDS,''),
+ if(input.image&&!/^[0-9a-f-]{36}$/.test(input.image))fail('图片标识无效');
+ return {...(input.image?{image:input.image}:{}),envelope:pick('envelope',ENVELOPES,'linen'),stamp:pick('stamp',STAMPS,'moon'),picture:pick('picture',PICTURES,''),card:pick('card',CARDS,''),
   place:pick('place',PLACES,PLACES[crypto.randomInt(PLACES.length)]),postcode:/^\d{6}$/.test(input.postcode||'')?input.postcode:String(crypto.randomInt(1000000)).padStart(6,'0')};
 }
 export function availableFor(s,l,who,now=Date.now()) {

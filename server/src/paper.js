@@ -43,7 +43,7 @@ export function viewLetter(s,l,who) {
   const readable=canRead(s,l,who), peer=s.profiles.find(p=>p.id===(l.from===who?l.to:l.from));
   return {id:l.id,route_id:l.route_id,own:l.from===who,peer:peer?{name:peer.name,city:peer.public_city?peer.city:undefined}:null,
     status:l.cancelled?'closed':!l.to?'matching':delivered(l)?'delivered':'transit',sent_at:l.sent_at,arrives_at:l.arrives_at,
-    distance:l.distance===null?null:Math.round(l.distance/100)*100,sealed:!!l.sealed,opened:l.from===who?undefined:!!l.opened_at,wrapping:l.wrapping?{...l.wrapping,...(!readable?{card:undefined,picture:undefined}:{})}:null,instant:l.instant,reader:l.reader,ai_assisted:l.ai_assisted,
+    distance:l.distance===null?null:Math.round(l.distance/100)*100,sealed:!!l.sealed,opened:l.from===who?undefined:!!l.opened_at,wrapping:l.wrapping?{...l.wrapping,...(!readable?{card:undefined,picture:undefined,image:undefined}:{})}:null,instant:l.instant,reader:l.reader,ai_assisted:l.ai_assisted,
     ...(readable?{content:l.content,paragraphs:paragraphs(l.content)}:{})};
 }
 export function paragraphs(text) { return text.split(/\n\s*\n/).flatMap(p=>p.trim().match(/[\s\S]{1,600}/g)||[]).filter(Boolean); }

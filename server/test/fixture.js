@@ -17,7 +17,7 @@ export async function fixture({ limit = 1000, paper = [] } = {}) {
     created_at: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
   }));
   await writeFile(path.join(dataDir, 'letters.json'), JSON.stringify({ letters, feedbacks: [], paper }));
-  const state = { replies: [], tts: 0, release: null, hold: false };
+  const state = { replies: [], assists: [], tts: 0, release: null, hold: false };
   const wav = Buffer.alloc(44 + 8000);
   wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
   wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
@@ -29,6 +29,7 @@ export async function fixture({ limit = 1000, paper = [] } = {}) {
     const reply = data => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ code: 0, data })); };
     if(req.url==='/me'){const token=String(req.headers.authorization||'').replace(/^Bearer /,'');if(!/^test-user-[abc]$/.test(token)){res.statusCode=401;return res.end(JSON.stringify({code:40101,message:'未登录'}));}return reply({user:{id:token,display_name:token}});}
     if (req.url === '/personas') return reply({ list: [persona, { ...persona, id: 'other', name: '另一位朋友' }] });
+    if(req.url==='/write-assist'){state.assists.push(input);return reply({text:'远方的朋友：\n'+(input.content||input.intent)+'\n愿你安好。'});}
     if (req.url === '/reply') {
       state.replies.push(input);
       return reply({ paragraphs: [`回信 ${state.replies.length} 的第一段`, `回信 ${state.replies.length} 的第二段`], signature: '爱莉希雅' });
