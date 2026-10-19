@@ -12,7 +12,7 @@ const records=JSON.parse(fs.readFileSync(new URL('./city-data.json',import.meta.
 export const CITIES={...Object.fromEntries(records.filter(c=>c.coordinates).map(c=>[c.value,c.coordinates])),...LEGACY_CITIES};
 const legacy=Object.keys(LEGACY_CITIES).map(value=>({value,label:records.find(c=>c.value===value)?.label||value,coordinates:LEGACY_CITIES[value]}));
 const normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[\s/·'’-]/g,'');
-export const CITY_OPTIONS=[...legacy,...records.filter(c=>!Object.hasOwn(LEGACY_CITIES,c.value))].map(c=>({value:c.value,label:c.label,has_coordinates:Object.hasOwn(CITIES,c.value),romanized:normalize(pinyin(c.value,{toneType:'none'})),initials:normalize(pinyin(c.value,{pattern:'first',toneType:'none'})),search:normalize(c.label+' '+c.label.replace(/特别行政区|壮族自治区|回族自治区|维吾尔自治区|自治区|省|市|区|县/g,'')+' '+pinyin(c.label,{toneType:'none'})+' '+pinyin(c.label,{pattern:'first',toneType:'none'}))}));
+export const CITY_OPTIONS=[...legacy,...records.filter(c=>!Object.hasOwn(LEGACY_CITIES,c.value))].map(c=>({value:c.value,label:c.label,has_coordinates:Object.hasOwn(CITIES,c.value),coordinates:CITIES[c.value]||null,romanized:normalize(pinyin(c.value,{toneType:'none'})),initials:normalize(pinyin(c.value,{pattern:'first',toneType:'none'})),search:normalize(c.label+' '+c.label.replace(/特别行政区|壮族自治区|回族自治区|维吾尔自治区|自治区|省|市|区|县/g,'')+' '+pinyin(c.label,{toneType:'none'})+' '+pinyin(c.label,{pattern:'first',toneType:'none'}))}));
 export const CITY_NAMES=CITY_OPTIONS.map(c=>c.value);
 export function resolveCity(name){
  const value=String(name||'').trim();
