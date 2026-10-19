@@ -1,3 +1,4 @@
+import {suspension,assertPaperAccess} from './paper-moderation.js';
 import { mailAllowance } from './postal-quota.js';
 import crypto from 'node:crypto';
 import { db, saveDb, uuid } from './db.js';
@@ -26,27 +27,29 @@ export function mutate(fn) {
   });
   queue=job.catch(()=>{});return job;
 }
-export function profile(s,id) { const p=s.profiles.find(p=>p.id===id);if(!p)fail('请先填写寄信名片',401);return p; }
+export function profile(s,id) { assertPaperAccess(s,id);const p=s.profiles.find(p=>p.id===id);if(!p)fail('请先填写寄信名片',401);return p; }
 export function route(s,id,who) {
+  assertPaperAccess(s,who);
   const r=s.routes.find(r=>r.id===id && r.members.includes(who));if(!r)fail('邮路不存在',404);return r;
 }
 export function blocked(s,a,b) {return s.profiles.find(p=>p.id===a)?.blocked.includes(b)||s.profiles.find(p=>p.id===b)?.blocked.includes(a);}
-export function delivered(l,now=Date.now()) {return !!l.to && !l.cancelled && Date.parse(l.arrives_at)<=now;}
+export function delivered(l,now=Date.now()) {return !!l.to && !l.moderation?.hidden && !l.cancelled && Date.parse(l.arrives_at)<=now;}
 export function canRead(s,l,who,now=Date.now()) {
-  return l.from===who || (!l.cancelled && l.to===who && delivered(l,now) && (!l.sealed||!!l.opened_at) && !blocked(s,l.from,who));
+  if(suspension(s.profiles.find(p=>p.id===who),now))return false;
+  return l.from===who || (!l.moderation?.hidden && !l.cancelled && l.to===who && delivered(l,now) && (!l.sealed||!!l.opened_at) && !blocked(s,l.from,who));
 }
 export function viewLetter(s,l,who) {
   const readable=canRead(s,l,who), peer=s.profiles.find(p=>p.id===(l.from===who?l.to:l.from));
   return {id:l.id,route_id:l.route_id,own:l.from===who,peer:peer?{name:peer.name,city:peer.public_city?peer.city:undefined}:null,
     status:l.cancelled?'closed':!l.to?'matching':delivered(l)?'delivered':'transit',sent_at:l.sent_at,arrives_at:l.arrives_at,
-    distance:l.distance===null?null:Math.round(l.distance/100)*100,sealed:!!l.sealed,opened:l.from===who?undefined:!!l.opened_at,wrapping:l.wrapping?{...l.wrapping,...(!readable?{card:undefined,picture:undefined,image:undefined}:{})}:null,instant:l.instant,reader:l.reader,ai_assisted:l.ai_assisted,
+    distance:l.distance===null?null:Math.round(l.distance/100)*100,sealed:!!l.sealed,opened:l.from===who?undefined:!!l.opened_at,wrapping:l.wrapping?{...l.wrapping,...(!readable?{card:undefined,picture:undefined,image:undefined}:{})}:null,moderated:!!l.moderation?.hidden,instant:l.instant,reader:l.reader,ai_assisted:l.ai_assisted,
     ...(readable?{content:l.content,paragraphs:paragraphs(l.content)}:{})};
 }
 export function paragraphs(text) { return text.split(/\n\s*\n/).flatMap(p=>p.trim().match(/[\s\S]{1,600}/g)||[]).filter(Boolean); }
 export function match(s,now=Date.now()) {
   for(const l of s.letters.filter(l=>!l.to&&!l.cancelled)) {
-    const sender=s.profiles.find(p=>p.id===l.from);if(!sender)continue;
-    const candidates=s.profiles.filter(p=>mailAllowance(s,p.id,now).allowed&&p.id!==sender.id&&!p.paused&&p.language===sender.language&&!blocked(s,sender.id,p.id)
+    const sender=s.profiles.find(p=>p.id===l.from);if(!sender||suspension(sender,now))continue;
+    const candidates=s.profiles.filter(p=>!suspension(p,now)&&mailAllowance(s,p.id,now).allowed&&p.id!==sender.id&&!p.paused&&p.language===sender.language&&!blocked(s,sender.id,p.id)
       && (p.receive_opt_in||s.letters.some(x=>x.from===p.id&&!x.cancelled))
       && now-Date.parse(p.active_at)<30*86400000
       && !s.routes.some(r=>r.members.includes(sender.id)&&r.members.includes(p.id))

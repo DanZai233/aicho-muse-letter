@@ -49,7 +49,7 @@ export async function fixture({ limit = 1000, paper = [] } = {}) {
   await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
   const port = reservation.address().port;
   await new Promise(resolve => reservation.close(resolve));
-  const env = { ...process.env, DATA_DIR: dataDir, PORT: String(port), MUSE_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, REQUESTS_PER_HOUR: String(limit) };
+  const env = { ...process.env, DATA_DIR: dataDir, PORT: String(port), FEEDBACK_ADMIN_TOKEN:'test-admin-token', MUSE_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, REQUESTS_PER_HOUR: String(limit) };
   for (const key of ['MYSQL_HOST', 'DB_HOST']) delete env[key];
   const child = spawn(process.execPath, [fileURLToPath(new URL('../src/index.js', import.meta.url))], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let logs = ''; child.stdout.on('data', x => { logs += x; }); child.stderr.on('data', x => { logs += x; });

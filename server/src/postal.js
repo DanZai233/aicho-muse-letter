@@ -1,3 +1,4 @@
+import {suspension,assertPaperAccess} from './paper-moderation.js';
 import { mailAllowance } from './postal-quota.js';
 import crypto from 'node:crypto';
 import { fail, distance, travelHours, blocked } from './paper.js';
@@ -17,10 +18,11 @@ export function wrapping(input={}) {
 }
 export function availableFor(s,l,who,now=Date.now()) {
  const p=s.profiles.find(p=>p.id===who),sender=s.profiles.find(p=>p.id===l.from);
- return p&&sender&&!l.to&&!l.cancelled&&l.from!==who&&!p.paused&&p.language===sender.language&&!blocked(s,l.from,who)
+ return p&&sender&&!suspension(p,now)&&!suspension(sender,now)&&!l.to&&!l.cancelled&&l.from!==who&&!p.paused&&p.language===sender.language&&!blocked(s,l.from,who)
   &&!s.routes.some(r=>r.members.includes(l.from)&&r.members.includes(who));
 }
 export function claim(s,who,now=Date.now()) {
+ assertPaperAccess(s,who,now);
  const p=s.profiles.find(p=>p.id===who);
  if(!p)fail('请先填写寄信名片',409);
  p.active_at=new Date(now).toISOString();p.receive_opt_in=true;

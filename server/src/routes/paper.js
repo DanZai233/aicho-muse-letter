@@ -1,3 +1,5 @@
+import paperAdminRoutes from './paper-admin.js';
+import {assertPaperAccess} from '../paper-moderation.js';
 import { CITY_NAMES, CITY_OPTIONS } from '../cities.js';
 import { mailAllowance } from '../postal-quota.js';
 import { wrapping, claim, ENVELOPES, STAMPS, PICTURES, CARDS, PLACES } from '../postal.js';
@@ -13,15 +15,8 @@ const wrap=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(nex
 const send=(res,data)=>res.json({code:0,data});
 const text=(v,max)=>String(v||'').trim().slice(0,max);
 router.get('/meta',wrap(async(req,res)=>send(res,{cities:CITY_NAMES,city_options:CITY_OPTIONS,envelopes:ENVELOPES,stamps:STAMPS,pictures:PICTURES,cards:CARDS,places:PLACES})));
-router.get('/admin/reports',wrap(async(req,res)=>{
- if(!process.env.FEEDBACK_ADMIN_TOKEN||req.headers['x-admin-token']!==process.env.FEEDBACK_ADMIN_TOKEN)fail('无权访问',403);
- const s=state();send(res,{list:s.reports.filter(r=>r.status==='pending').map(r=>({...r,letter:s.letters.find(l=>l.id===r.letter_id)?.content})).slice(-100)});
-}));
-router.post('/admin/reports/:id/resolve',wrap(async(req,res)=>{
- if(!process.env.FEEDBACK_ADMIN_TOKEN||req.headers['x-admin-token']!==process.env.FEEDBACK_ADMIN_TOKEN)fail('无权访问',403);
- send(res,await mutate(s=>{const report=s.reports.find(r=>r.id===req.params.id);if(!report)fail('举报不存在',404);report.status='reviewed';report.reviewed_at=new Date().toISOString();return {ok:true};}));
-}));
-router.use((req,res,next)=>{museAccount('/me',{token:String(req.headers.authorization||'').replace(/^Bearer /,'')}).then(({user})=>{req.paperId=user.id;next();}).catch(next);});
+router.use('/admin',paperAdminRoutes);
+router.use((req,res,next)=>{museAccount('/me',{token:String(req.headers.authorization||'').replace(/^Bearer /,'')}).then(({user})=>{req.paperId=user.id;assertPaperAccess(state(),user.id);next();}).catch(next);});
 router.post('/images',createRateLimiter({limit:20,matches:()=>true}),raw({type:['image/jpeg','image/png','image/webp'],limit:'5mb'}),wrap(async(req,res)=>{
  profile(state(),req.paperId);send(res,{id:await storeImage(req.paperId,req.body)});
 }));
@@ -42,6 +37,7 @@ router.get('/',wrap(async(req,res)=>{
 }));
 router.post('/check-mail',wrap(async(req,res)=>send(res,await mutate(s=>claim(s,req.paperId)))));
 router.post('/letters/:id/open',wrap(async(req,res)=>send(res,await mutate(s=>{
+ assertPaperAccess(s,req.paperId);
  const l=s.letters.find(l=>l.id===req.params.id&&l.to===req.paperId);
  if(!l||!delivered(l)||blocked(s,l.from,req.paperId))fail('信件尚未抵达或不可访问',404);
  if(!l.opened_at)l.opened_at=new Date().toISOString();return {id:l.id};
@@ -51,6 +47,7 @@ router.post('/profile',wrap(async(req,res)=>{
  if(!text(b.name,30))fail('请填写笔名');
  if(b.city&&(typeof b.city!=='string'||b.city.length>60||/[<>\x00-\x1f]/.test(b.city)))fail('城市名称无效');
  send(res,await mutate(s=>{
+  assertPaperAccess(s,who);
   let p=s.profiles.find(p=>p.id===who);
   if(!p){p={id:who,blocked:[],active_at:new Date().toISOString()};s.profiles.push(p);}
   Object.assign(p,{name:text(b.name,30),city:text(b.city,60),public_city:!!b.public_city,language:['中文','English','日本語'].includes(b.language)?b.language:'中文',
@@ -91,7 +88,7 @@ router.post('/letters',wrap(async(req,res)=>{
 }));
 router.post('/letters/:id/repost',wrap(async(req,res)=>send(res,await mutate(s=>{
  const who=req.paperId,l=s.letters.find(l=>l.id===req.params.id&&l.from===who);
- if(!l||!l.route_id)fail('信件不存在',404);const r=route(s,l.route_id,who);
+ if(!l||!l.route_id)fail('信件不存在',404);if(l.moderation?.hidden)fail('信件已被管理员屏蔽',403);const r=route(s,l.route_id,who);
  if(r.initiator!==who||r.first_reply_used||Date.now()-Date.parse(l.sent_at)<7*86400000)fail('初封信寄出七天后且未收到回信，才可重新投递',409);
  if(l.reposted)fail('这封信已经重新寄出',409);
  if(s.letters.filter(x=>x.from===who&&!x.cancelled&&(!x.route_id||s.routes.find(y=>y.id===x.route_id)?.status==='invited')).length>2)fail('请先等候已有相遇',409);
@@ -99,6 +96,7 @@ router.post('/letters/:id/repost',wrap(async(req,res)=>send(res,await mutate(s=>
  const copy={...l,id:uuid(),key:uuid(),to:null,route_id:null,sent_at:new Date().toISOString(),arrives_at:null,cancelled:false,reposted:false,distance:null,opened_at:null,received_at:null};s.letters.push(copy);match(s);return {id:copy.id};
 }))));
 router.post('/letters/:id/withdraw',wrap(async(req,res)=>send(res,await mutate(s=>{
+ assertPaperAccess(s,req.paperId);
  const l=s.letters.find(l=>l.id===req.params.id&&l.from===req.paperId);if(!l)fail('信件不存在',404);
  if(l.to||l.cancelled)fail('只有尚未匹配的信可以撤回',409);l.cancelled=true;return {ok:true};
 }))));
@@ -128,6 +126,7 @@ router.post('/assist',wrap(async(req,res)=>{
  let incoming='';
  if(b.letter_id){const l=s.letters.find(l=>l.id===b.letter_id&&l.to===who);if(!l||!canRead(s,l,who))fail('来信尚未送达或不可访问',404);incoming=l.content;}
  const r=await assistLetter({mode,content,intent,tone:text(b.tone,30)||'自然',incoming,sender:profile(s,who).name});
+ assertPaperAccess(state(),who);
  if(!r.text||r.text.length>3000)fail('草稿为空或过长，请重试',502);
  send(res,{text:r.text,ai_assisted:true});
 }));
