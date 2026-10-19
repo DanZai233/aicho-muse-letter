@@ -32,7 +32,8 @@ test('account auth, first instant reply, idempotency, in-transit secrecy, AI and
  assert.equal((await req('')).data.profile.name,'a');
  const reply={route_id:'first',content,reader:'preset-elysia',key:'reply-once'};
  const [a,b]=await Promise.all([req('/letters',{who:'b',method:'POST',body:reply}),req('/letters',{who:'b',method:'POST',body:reply})]);assert.equal(a.data.id,b.data.id);
- let mailbox=(await req('')).data;const instant=mailbox.letters.find(l=>l.id===a.data.id);assert.equal(instant.status,'delivered');assert.equal(instant.instant,true);
+ let mailbox=(await req('')).data;const instant=mailbox.letters.find(l=>l.id===a.data.id);assert.equal(instant.status,'delivered');assert.equal(instant.instant,true);assert.equal(instant.content,undefined);
+ assert.equal((await req(`/letters/${a.data.id}/open`,{method:'POST',body:{}})).status,200);
  const follow=await req('/letters',{method:'POST',body:{...reply,key:'follow'}});assert.equal(follow.status,200);
  mailbox=(await req('',{who:'b'})).data;const transit=mailbox.letters.find(l=>l.id===follow.data.id);assert.equal(transit.status,'transit');assert.equal(transit.content,undefined);assert.equal(transit.paragraphs,undefined);
  assert.equal((await req('/letters',{method:'POST',body:{...reply,key:'too-soon'}})).status,409);
@@ -73,4 +74,48 @@ test('unmatched withdrawal, seven-day repost and report authorization preserve p
  assert.equal((await call('/routes/first/report','c',{letter_id:'initial',reason:'测试'})).status,404);
  // Reposting cancels the original invitation, so its recipient cannot read/report it.
  assert.equal((await call('/routes/first/report','b',{letter_id:'initial',reason:'测试'})).status,404);
+});
+
+test('first-time recipients claim one queued letter atomically, keep packaging and explicitly open after delivery',async t=>{
+ const s=seed()[0];s.routes=[];s.letters=[{id:'queued',from:'test-user-a',content,key:'queued',sent_at:new Date(Date.now()-3*86400000).toISOString(),wrapping:{envelope:'rose',stamp:'bird',place:'云边小站',postcode:'000123',picture:'sea',card:'不必急着回信，照顾好自己。'},sealed:true}];
+ const app=await fixture({paper:[s]});t.after(()=>app.close());
+ const call=async(path,who='b',body)=>{const r=await fetch(app.url+'/api/v1/paper'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer test-user-'+who},body:body?JSON.stringify(body):undefined});return {status:r.status,...await r.json()};};
+ const results=await Promise.all([call('/check-mail','b',{}),call('/check-mail','c',{})]);
+ const winner=results.findIndex(r=>r.data.id==='queued');assert.ok(winner>=0);assert.equal(results.filter(r=>r.data.id==='queued').length,1);
+ const who=winner===0?'b':'c',other=who==='b'?'c':'b';
+ const sealed=(await call('',who)).data.letters.find(l=>l.id==='queued');
+ assert.equal(sealed.status,'delivered');assert.equal(sealed.content,undefined);assert.equal(sealed.wrapping.envelope,'rose');assert.equal(sealed.wrapping.postcode,'000123');assert.equal(sealed.wrapping.picture,undefined);assert.equal(sealed.opened,false);
+ assert.equal((await call('/letters/queued/audio/0',who,{reader:'preset-elysia'})).status,404);
+ assert.equal((await call('/assist',who,{letter_id:'queued',intent:'我想回一封信给你'})).status,404);
+ assert.equal((await call('/letters/queued/open',other,{})).status,404);
+ assert.equal((await call('/check-mail',who,{})).data.id,'queued');
+ assert.equal((await call('/letters/queued/open',who,{})).status,200);
+ const opened=(await call('',who)).data.letters.find(l=>l.id==='queued');assert.equal(opened.content,content);assert.equal(opened.wrapping.picture,'sea');assert.equal(opened.wrapping.card,s.letters[0].wrapping.card);
+ const sender=(await call('','a')).data.letters.find(l=>l.id==='queued');assert.equal(sender.opened,undefined);
+ assert.equal((await call('/check-mail',who,{})).data.id,null);
+});
+
+test('new packaging is durable and cannot bypass city travel or sealed access',async t=>{
+ const s=seed()[0];s.routes=[];s.letters=[];
+ const app=await fixture({paper:[s]});t.after(()=>app.close());
+ const call=async(path,who,body)=>{const r=await fetch(app.url+'/api/v1/paper'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer test-user-'+who},body:body?JSON.stringify(body):undefined});return {status:r.status,...await r.json()};};
+ assert.equal((await call('/letters','a',{content,key:'invalid',wrapping:{picture:'https://untrusted.test/x'}})).status,400);
+ const pack={envelope:'midnight',stamp:'star',place:'月亮街七号',postcode:'000001',picture:'flowers',card:'愿你今天也有一点小小的快乐。'};
+ const sent=await call('/letters','a',{content,key:'decorated',wrapping:pack});assert.equal(sent.status,200);
+ const picked=await call('/check-mail','b',{});assert.equal(picked.data.id,sent.data.id);
+ const incoming=(await call('','b')).data.letters[0];assert.equal(incoming.status,'transit');assert.equal(incoming.content,undefined);assert.equal(incoming.wrapping.picture,undefined);
+ assert.equal((await call('/letters/'+sent.data.id+'/open','b',{})).status,404);
+ const sender=(await call('','a')).data.letters[0];assert.deepEqual(sender.wrapping,pack);
+ const {readFile}=await import('node:fs/promises');const stored=JSON.parse(await readFile(app.dataDir+'/letters.json','utf8')).paper[0].letters[0];assert.deepEqual(stored.wrapping,pack);assert.equal(stored.to,'test-user-b');
+});
+
+test('checking an empty mailbox opts a new reader into future matching without requiring an outgoing letter',async t=>{
+ const s=seed()[0];s.routes=[];s.letters=[];const app=await fixture({paper:[s]});t.after(()=>app.close());
+ const call=async(path,who,body)=>{const r=await fetch(app.url+'/api/v1/paper'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer test-user-'+who},body:body?JSON.stringify(body):undefined});return {status:r.status,...await r.json()};};
+ assert.equal((await call('/check-mail','b',{})).data.id,null);
+ assert.equal((await call('/letters','a',{content,key:'bad',wrapping:null})).status,400);
+ const sent=await call('/letters','a',{content,key:'future'});assert.equal(sent.status,200);
+ const inbox=(await call('','b')).data;assert.equal(inbox.letters.length,1);assert.equal(inbox.letters[0].id,sent.data.id);assert.equal(inbox.letters[0].sealed,true);assert.equal(inbox.letters[0].content,undefined);
+ assert.equal((await call('/check-mail','b',{})).data.id,sent.data.id);
+ assert.equal((await call('','b')).data.routes.length,1);
 });

@@ -1,3 +1,4 @@
+import { wrapping, claim, ENVELOPES, STAMPS, PICTURES, CARDS, PLACES } from '../postal.js';
 import { createRateLimiter } from '../tasks.js';
 import { Router } from 'express';
 import path from 'node:path';
@@ -8,7 +9,7 @@ const router=Router();
 const wrap=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 const send=(res,data)=>res.json({code:0,data});
 const text=(v,max)=>String(v||'').trim().slice(0,max);
-router.get('/meta',wrap(async(req,res)=>send(res,{cities:Object.keys(CITIES)})));
+router.get('/meta',wrap(async(req,res)=>send(res,{cities:Object.keys(CITIES),envelopes:ENVELOPES,stamps:STAMPS,pictures:PICTURES,cards:CARDS,places:PLACES})));
 router.get('/admin/reports',wrap(async(req,res)=>{
  if(!process.env.FEEDBACK_ADMIN_TOKEN||req.headers['x-admin-token']!==process.env.FEEDBACK_ADMIN_TOKEN)fail('无权访问',403);
  const s=state();send(res,{list:s.reports.filter(r=>r.status==='pending').map(r=>({...r,letter:s.letters.find(l=>l.id===r.letter_id)?.content})).slice(-100)});
@@ -28,14 +29,20 @@ router.get('/',wrap(async(req,res)=>{
  send(res,{user_id:who,profile:{name:p.name,city:p.city,public_city:p.public_city,language:p.language,topics:p.topics,paused:p.paused,reader:p.reader},routes,
  letters:s.letters.filter(l=>(l.from===who||l.to===who)&&!(l.to===who&&blocked(s,l.from,who))).map(l=>viewLetter(s,l,who)).reverse()});
 }));
+router.post('/check-mail',wrap(async(req,res)=>send(res,await mutate(s=>claim(s,req.paperId)))));
+router.post('/letters/:id/open',wrap(async(req,res)=>send(res,await mutate(s=>{
+ const l=s.letters.find(l=>l.id===req.params.id&&l.to===req.paperId);
+ if(!l||!delivered(l)||blocked(s,l.from,req.paperId))fail('信件尚未抵达或不可访问',404);
+ if(!l.opened_at)l.opened_at=new Date().toISOString();return {id:l.id};
+}))));
 router.post('/profile',wrap(async(req,res)=>{
  const b=req.body||{},who=req.paperId;
  if(!text(b.name,30))fail('请填写笔名');
- if(b.city&&!Object.hasOwn(CITIES,b.city))fail('请选择列表中的城市，或使用默认邮程');
+ if(b.city&&(typeof b.city!=='string'||b.city.length>60||/[<>\x00-\x1f]/.test(b.city)))fail('城市名称无效');
  send(res,await mutate(s=>{
   let p=s.profiles.find(p=>p.id===who);
   if(!p){p={id:who,blocked:[],active_at:new Date().toISOString()};s.profiles.push(p);}
-  Object.assign(p,{name:text(b.name,30),city:b.city||'',public_city:!!b.public_city,language:['中文','English','日本語'].includes(b.language)?b.language:'中文',
+  Object.assign(p,{name:text(b.name,30),city:text(b.city,60),public_city:!!b.public_city,language:['中文','English','日本語'].includes(b.language)?b.language:'中文',
    topics:Array.isArray(b.topics)?b.topics.map(t=>text(t,20)).filter(Boolean).slice(0,5):[],paused:!!b.paused,reader:text(b.reader,128),active_at:new Date().toISOString()});
   match(s);return {ok:true};
  }));
@@ -44,6 +51,7 @@ router.post('/letters',wrap(async(req,res)=>{
  const b=req.body||{},who=req.paperId,content=text(b.content,3001),key=text(b.key,80);
  if(content.length<20||content.length>3000)fail('请写 20～3000 字');
  if(!key)fail('缺少寄信标识，请重试');
+ const packaging=wrapping(b.wrapping);
  const readers=b.reader?await getPersonas():[];const reader=readers.find(p=>p.id===b.reader);
  send(res,await mutate(s=>{
   const p=profile(s,who);p.active_at=new Date().toISOString();
@@ -53,7 +61,7 @@ router.post('/letters',wrap(async(req,res)=>{
   if(b.route_id){
    r=route(s,b.route_id,who);to=r.members.find(id=>id!==who);
    if(r.status==='closed'||blocked(s,who,to))fail('这条邮路已结束',409);
-   const incoming=s.letters.filter(l=>l.route_id===r.id&&l.to===who&&delivered(l));
+   const incoming=s.letters.filter(l=>l.route_id===r.id&&l.to===who&&canRead(s,l,who));
    if(!incoming.length)fail('等来信送达后再回信',409);
    if(s.letters.some(l=>l.route_id===r.id&&l.from===who&&!l.cancelled&&!delivered(l)))fail('你有一封信还在途中',409);
    if(!r.first_reply_used&&who!==r.initiator){instant=true;r.first_reply_used=true;r.status='replied';}
@@ -64,7 +72,7 @@ router.post('/letters',wrap(async(req,res)=>{
    if(open.length>=2)fail('已有两封相遇信在等待，先等一等',409);
   }
   const now=new Date().toISOString();
-  const l={id:uuid(),key,from:who,to,route_id:r?.id||null,content,reader:reader?{id:reader.id,name:reader.name}:null,ai_assisted:!!b.ai_assisted,
+  const l={id:uuid(),key,wrapping:packaging,sealed:true,opened_at:null,from:who,to,route_id:r?.id||null,content,reader:reader?{id:reader.id,name:reader.name}:null,ai_assisted:!!b.ai_assisted,
    instant,distance:km,sent_at:now,arrives_at:to?new Date(Date.now()+(instant?0:travelHours(km)*3600000)).toISOString():null};
   s.letters.push(l);match(s);return {id:l.id};
  }));
@@ -76,7 +84,7 @@ router.post('/letters/:id/repost',wrap(async(req,res)=>send(res,await mutate(s=>
  if(l.reposted)fail('这封信已经重新寄出',409);
  if(s.letters.filter(x=>x.from===who&&!x.cancelled&&(!x.route_id||s.routes.find(y=>y.id===x.route_id)?.status==='invited')).length>2)fail('请先等候已有相遇',409);
  r.status='closed';l.reposted=true;l.cancelled=true;
- const copy={...l,id:uuid(),key:uuid(),to:null,route_id:null,sent_at:new Date().toISOString(),arrives_at:null,cancelled:false,reposted:false,distance:null};s.letters.push(copy);match(s);return {id:copy.id};
+ const copy={...l,id:uuid(),key:uuid(),to:null,route_id:null,sent_at:new Date().toISOString(),arrives_at:null,cancelled:false,reposted:false,distance:null,opened_at:null};s.letters.push(copy);match(s);return {id:copy.id};
 }))));
 router.post('/letters/:id/withdraw',wrap(async(req,res)=>send(res,await mutate(s=>{
  const l=s.letters.find(l=>l.id===req.params.id&&l.from===req.paperId);if(!l)fail('信件不存在',404);
