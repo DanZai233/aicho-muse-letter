@@ -18,7 +18,7 @@ function loadJson() {
   if (fs.existsSync(DB_FILE)) {
     return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
   }
-  return { letters: [], feedbacks: [] };
+  return { letters: [], feedbacks: [], paper: [] };
 }
 
 // ---- MySQL 模式：letters 表（id PK, value JSON）----
@@ -47,6 +47,7 @@ async function ensureTable() {
     value JSON NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  await p.query('CREATE TABLE IF NOT EXISTS paper (id VARCHAR(64) PRIMARY KEY, value JSON NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   // Existing JSON rows remain intact; generated columns provide indexed mailbox queries.
   const [columns] = await p.query('SHOW COLUMNS FROM letters');
   const names = new Set(columns.map(c => c.Field));
@@ -69,20 +70,22 @@ async function mysqlLoad() {
   const p = await getPool();
   const [rows] = await p.query('SELECT id, value FROM letters');
   cache.letters = rows.map(r => r.value).filter(v => v && typeof v === 'object');
+  const [paperRows] = await p.query('SELECT id, value FROM paper');
+  cache.paper = paperRows.map(r => r.value).filter(v => v && typeof v === 'object');
   const [fbRows] = await p.query('SELECT id, value FROM feedbacks');
   cache.feedbacks = fbRows.map(r => r.value).filter(v => v && typeof v === 'object');
 }
 
 // Serialize snapshots: only changed rows are written, and failures reach callers.
-let saved = { letters: new Map(), feedbacks: new Map() };
+let saved = { letters: new Map(), feedbacks: new Map(), paper: new Map() };
 let writes = Promise.resolve();
 function snapshot() {
-  return Object.fromEntries(['letters', 'feedbacks'].map(table =>
+  return Object.fromEntries(['letters', 'feedbacks', 'paper'].map(table =>
     [table, new Map(cache[table].map(row => [row.id, JSON.stringify(row)]))]));
 }
 async function persist(changes) {
   if (!mysqlMode()) {
-    const next = { letters: new Map(saved.letters), feedbacks: new Map(saved.feedbacks) };
+    const next = { letters: new Map(saved.letters), feedbacks: new Map(saved.feedbacks), paper: new Map(saved.paper) };
     for (const { table, id, value } of changes) {
       if (value === null) next[table].delete(id); else next[table].set(id, value);
     }
@@ -115,6 +118,7 @@ async function persist(changes) {
 export async function initStorage({ connectionPool } = {}) {
   if (connectionPool) pool = connectionPool;
   cache = loadJson();
+  if (!Array.isArray(cache.paper)) cache.paper = [];
   if (!Array.isArray(cache.letters)) cache.letters = [];
   if (!Array.isArray(cache.feedbacks)) cache.feedbacks = [];
   if (mysqlMode()) {
@@ -135,7 +139,7 @@ export function db() {
 
 export function saveDb(table, row, deleted = false) {
   if (!cache) return Promise.resolve();
-  if (!['letters', 'feedbacks'].includes(table) || !row?.id) throw new Error('Invalid storage operation');
+  if (!['letters', 'feedbacks', 'paper'].includes(table) || !row?.id) throw new Error('Invalid storage operation');
   const change = { table, id: row.id, value: deleted ? null : JSON.stringify(row) };
   const pending = writes.then(() => persist([change])).catch(error => {
     // Roll back a failed mutation if no newer mutation has replaced it.

@@ -1,3 +1,4 @@
+import { accountToken } from './account.js';
 import { readStorage, writeStorage } from './storage.js';
 // 信笺 API 封装 + 访客标识
 export function visitorId() {
@@ -10,14 +11,17 @@ export function visitorId() {
 }
 
 async function req(path, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', 'X-Visitor-Id': visitorId(), ...(opts.headers || {}) };
+  const legacy=opts.legacy||new URLSearchParams(window.location.search).get('legacy')==='1';
+  if(legacy&&path.startsWith('/letters')&&!path.includes('legacy='))path+=(path.includes('?')?'&':'?')+'legacy=1';
+  const headers = { ...(!legacy&&accountToken()?{Authorization:'Bearer '+accountToken()}:{}), 'Content-Type': 'application/json', 'X-Visitor-Id': visitorId(), ...(opts.headers || {}) };
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (opts.signal?.aborted) abort();
   opts.signal?.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(abort, 210000);
   try {
-    const response = await fetch('/api/v1' + path, { ...opts, headers, signal: controller.signal });
+    const { legacy: _legacy, ...fetchOptions }=opts;
+    const response = await fetch('/api/v1' + path, { ...fetchOptions, headers, signal: controller.signal });
     let data;
     try { data = await response.json(); }
     catch (error) {
@@ -39,7 +43,7 @@ export const api = {
   personas: (signal) => req('/letters/personas', { signal }),
   sendLetter: (body) => req('/letters', { method: 'POST', body: JSON.stringify(body) }),
   letter: (id, signal) => req('/letters/' + id, { signal }),
-  letters: (query = {}, signal) => req('/letters?' + new URLSearchParams(query), { signal }),
+  letters: (query = {}, signal) => req('/letters?' + new URLSearchParams(query), { signal, legacy:query.legacy==='1' }),
   regen: (id) => req('/letters/' + id + '/regen', { method: 'POST' }),
   shareOn: (id) => req('/letters/' + id + '/share', { method: 'POST' }),
   shareOff: (id) => req('/letters/' + id + '/share', { method: 'DELETE' }),

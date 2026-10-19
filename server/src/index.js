@@ -8,6 +8,8 @@ import { initStorage, db, saveDb, closeStorage } from './db.js';
 import { DATA_DIR } from './db.js';
 import letterRoutes from './routes/letters.js';
 import { cleanupAudio } from './muse.js';
+import accountRoutes from './routes/account.js';
+import paperRoutes from './routes/paper.js';
 import feedbackRoutes from './routes/feedback.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +32,7 @@ const app = express();
 // Only explicitly trusted proxies may supply the client IP.
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY.split(',').map(s => s.trim()));
 app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : false }));
+app.use('/connect', (req,res,next)=>{res.set('Referrer-Policy','no-referrer').set('Cache-Control','no-store');next();});
 app.use(express.json({ limit: '32kb' }));
 
 app.get('/api/v1/health', (req, res) => {
@@ -45,6 +48,8 @@ app.get('/audio/:file', (req, res) => {
   res.set('Content-Type', 'audio/mpeg').set('Cache-Control', 'public, max-age=86400').sendFile(p);
 });
 
+app.use('/api/v1/account', createRateLimiter({limit:60,matches:req=>req.method==='POST'}), accountRoutes);
+app.use('/api/v1/paper', createRateLimiter({ limit: 180, matches: req => req.method === 'POST' }), paperRoutes);
 app.use('/api/v1', createRateLimiter({ limit: Math.max(1, Number(process.env.REQUESTS_PER_HOUR) || 30) }));
 app.use('/api/v1', letterRoutes);
 app.use('/api/v1', feedbackRoutes);

@@ -12,6 +12,7 @@ test('MySQL writes only changed rows, commits before resolving, and rolls back f
   process.env.DATA_DIR = dataDir;
   process.env.MYSQL_HOST = 'test-driver';
   const durable = new Map([['existing', { id: 'existing', visitor_id: 'owner', persona: { id: 'preset' }, created_at: '2026-01-01', status: 'done' }]]);
+  const paperRows = new Map();
   const queries = [];
   let pending, fail = false, commits = 0, rollbacks = 0;
   const connection = {
@@ -20,6 +21,7 @@ test('MySQL writes only changed rows, commits before resolving, and rolls back f
       queries.push({ sql, args });
       if (fail) throw new Error('database unavailable');
       if (sql.startsWith('INSERT INTO letters')) pending.set(args[0], JSON.parse(args[1]));
+      if (sql.startsWith('INSERT INTO paper')) paperRows.set(args[0], JSON.parse(args[1]));
       if (sql.startsWith('DELETE FROM letters')) pending.delete(args[0]);
       return [[]];
     },
@@ -60,5 +62,13 @@ test('MySQL writes only changed rows, commits before resolving, and rolls back f
   db().letters = db().letters.filter(l => l.id !== 'new');
   await saveDb('letters', current, true);
   assert.ok(!durable.has('new')); assert.ok(durable.has('existing'));
+  const postoffice={id:'postoffice',profiles:[{id:'user'}],letters:[],routes:[],reports:[]};
+  db().paper.push(postoffice);await saveDb('paper',postoffice);
+  assert.equal(paperRows.get('postoffice').profiles[0].id,'user');
+  fail=true;postoffice.profiles.push({id:'failed'});
+  await assert.rejects(saveDb('paper',postoffice),/database unavailable/);
+  assert.equal(db().paper[0].profiles.length,1);
+  assert.equal(paperRows.get('postoffice').profiles.length,1);
+  fail=false;
   await closeStorage();
 });

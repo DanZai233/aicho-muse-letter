@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { db, saveDb, uuid, shareToken, listLetters } from '../db.js';
-import { getPersonas, generateReply, synthesize, searchLibrary, polishLetter } from '../muse.js';
+import { getPersonas, generateReply, synthesize, searchLibrary, polishLetter, museAccount } from '../muse.js';
 
 const router = Router();
 for (const method of ['get', 'post', 'delete', 'patch']) {
@@ -11,11 +11,17 @@ for (const method of ['get', 'post', 'delete', 'patch']) {
     Promise.resolve().then(() => handler(req, res, next)).catch(next));
 }
 
+router.use((req,res,next)=>{
+ if(!req.headers.authorization||req.path.startsWith('/share/')||req.query.legacy==='1')return next();
+ museAccount('/me',{token:String(req.headers.authorization).replace(/^Bearer /,'')}).then(({user})=>{req.accountVisitor='muse:'+user.id;next();}).catch(next);
+});
+
 const running = new Map(); // letterId -> true
 
 function visitorOf(req) {
+  if(req.accountVisitor)return req.accountVisitor;
   const v = (req.headers['x-visitor-id'] || req.query.visitor || '').toString().trim();
-  return v && v.length <= 128 ? v : null;
+  return v && v.length <= 128 && !v.startsWith('muse:') ? v : null;
 }
 
 // Client IP honors only the Express trusted-proxy configuration.

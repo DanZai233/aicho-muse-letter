@@ -151,3 +151,12 @@ export async function cleanupAudio({ maxAgeMs = (Number(process.env.AUDIO_RETENT
     if (stat && Date.now() - stat.mtimeMs > maxAgeMs) await fs.promises.unlink(file).catch(() => {});
   }
 }
+
+// Account validation and PKCE handoff always go to Muse's auth service, never the letter LLM endpoint.
+export async function museAccount(endpoint, { token, body } = {}) {
+  const root=MUSE_BASE.replace(/\/api\/v1\/letter$/, '/api/v1/auth');
+  const response=await fetch(root+endpoint,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+  const result=await response.json();
+  if(!response.ok||result.code!==0)throw Object.assign(new Error(result.message||'Muse 账号服务暂不可用'),{status:response.status===401||response.status===403?401:502});
+  return result.data;
+}

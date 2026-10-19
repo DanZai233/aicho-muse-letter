@@ -30,10 +30,10 @@ export const upstreamQueue = createQueue({
   capacity: Math.max(1, Number(process.env.GENERATION_QUEUE_SIZE) || 50),
 });
 
-export function createRateLimiter({ limit = 30, windowMs = 3600000, now = Date.now } = {}) {
+export function createRateLimiter({ limit = 30, windowMs = 3600000, now = Date.now, matches = req => req.method === 'POST' && /^\/(letters|share|feedback)(\/|$)/.test(req.path) } = {}) {
   const buckets = new Map();
   return (req, res, next) => {
-    if (req.method !== 'POST' || !/^\/(letters|share|feedback)(\/|$)/.test(req.path)) return next();
+    if (!matches(req)) return next();
     const time = now();
     // Bound memory without retaining expired IP/visitor identifiers.
     for (const [key, bucket] of buckets) if (bucket.until <= time) buckets.delete(key);

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
-export async function fixture({ limit = 1000 } = {}) {
+export async function fixture({ limit = 1000, paper = [] } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'muse-letter-test-'));
   const persona = { id: 'preset-elysia', name: '爱莉希雅', voice_id: 'test-voice', avatar_color: '#8b7d6b' };
   const letters = Array.from({ length: 24 }, (_, i) => ({
@@ -16,7 +16,7 @@ export async function fixture({ limit = 1000 } = {}) {
     reply: [{ text: `第 ${i} 封回信的第一段` }, { text: `第 ${i} 封回信的第二段` }],
     created_at: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
   }));
-  await writeFile(path.join(dataDir, 'letters.json'), JSON.stringify({ letters, feedbacks: [] }));
+  await writeFile(path.join(dataDir, 'letters.json'), JSON.stringify({ letters, feedbacks: [], paper }));
   const state = { replies: [], tts: 0, release: null, hold: false };
   const wav = Buffer.alloc(44 + 8000);
   wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
@@ -27,6 +27,7 @@ export async function fixture({ limit = 1000 } = {}) {
     let body = ''; for await (const chunk of req) body += chunk;
     const input = body ? JSON.parse(body) : {};
     const reply = data => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ code: 0, data })); };
+    if(req.url==='/me'){const token=String(req.headers.authorization||'').replace(/^Bearer /,'');if(!/^test-user-[abc]$/.test(token)){res.statusCode=401;return res.end(JSON.stringify({code:40101,message:'未登录'}));}return reply({user:{id:token,display_name:token}});}
     if (req.url === '/personas') return reply({ list: [persona, { ...persona, id: 'other', name: '另一位朋友' }] });
     if (req.url === '/reply') {
       state.replies.push(input);
