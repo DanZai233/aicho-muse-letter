@@ -1,3 +1,4 @@
+import { CITY_NAMES, CITY_OPTIONS } from '../cities.js';
 import { mailAllowance } from '../postal-quota.js';
 import { wrapping, claim, ENVELOPES, STAMPS, PICTURES, CARDS, PLACES } from '../postal.js';
 import { createRateLimiter } from '../tasks.js';
@@ -11,7 +12,7 @@ const router=Router();
 const wrap=fn=>(req,res,next)=>Promise.resolve().then(()=>fn(req,res)).catch(next);
 const send=(res,data)=>res.json({code:0,data});
 const text=(v,max)=>String(v||'').trim().slice(0,max);
-router.get('/meta',wrap(async(req,res)=>send(res,{cities:Object.keys(CITIES),envelopes:ENVELOPES,stamps:STAMPS,pictures:PICTURES,cards:CARDS,places:PLACES})));
+router.get('/meta',wrap(async(req,res)=>send(res,{cities:CITY_NAMES,city_options:CITY_OPTIONS,envelopes:ENVELOPES,stamps:STAMPS,pictures:PICTURES,cards:CARDS,places:PLACES})));
 router.get('/admin/reports',wrap(async(req,res)=>{
  if(!process.env.FEEDBACK_ADMIN_TOKEN||req.headers['x-admin-token']!==process.env.FEEDBACK_ADMIN_TOKEN)fail('无权访问',403);
  const s=state();send(res,{list:s.reports.filter(r=>r.status==='pending').map(r=>({...r,letter:s.letters.find(l=>l.id===r.letter_id)?.content})).slice(-100)});

@@ -2,17 +2,13 @@ import { mailAllowance } from './postal-quota.js';
 import crypto from 'node:crypto';
 import { db, saveDb, uuid } from './db.js';
 
-export const CITIES = {
-  '北京': [39.9,116.4], '上海': [31.2,121.5], '广州': [23.1,113.3], '深圳': [22.5,114.1],
-  '杭州': [30.3,120.2], '成都': [30.6,104.1], '重庆': [29.6,106.6], '武汉': [30.6,114.3],
-  '南京': [32.1,118.8], '西安': [34.3,108.9], '长沙': [28.2,112.9], '厦门': [24.5,118.1],
-  '昆明': [25,102.7], '哈尔滨': [45.8,126.5], '乌鲁木齐': [43.8,87.6], '台北': [25,121.6],
-  '香港': [22.3,114.2], '东京': [35.7,139.7], '新加坡': [1.4,103.8], '伦敦': [51.5,-.1],
-  '巴黎': [48.9,2.4], '纽约': [40.7,-74], '悉尼': [-33.9,151.2], '洛杉矶': [34.1,-118.2],
-};
+import { CITIES, resolveCity } from './cities.js';
+export { CITIES };
+
 export function distance(a, b) {
-  if (!Object.hasOwn(CITIES,a) || !Object.hasOwn(CITIES,b)) return null;
-  const [x,y]=CITIES[a], [u,v]=CITIES[b], rad=n=>n*Math.PI/180;
+  const ac=resolveCity(a),bc=resolveCity(b);
+  if (!ac || !bc) return null;
+  const [x,y]=ac, [u,v]=bc, rad=n=>n*Math.PI/180;
   const h=Math.sin(rad(u-x)/2)**2+Math.cos(rad(x))*Math.cos(rad(u))*Math.sin(rad(v-y)/2)**2;
   return Math.round(6371*2*Math.asin(Math.sqrt(Math.min(1,h))));
 }

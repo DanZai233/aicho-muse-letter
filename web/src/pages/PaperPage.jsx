@@ -1,3 +1,4 @@
+import CityPicker from '../components/CityPicker.jsx';
 import { PostalEnvelope, PostalPacking, PostalKeepsakes, newWrapping } from '../components/PostalEnvelope.jsx';
 import { suggestCity } from '../postal-location.js';
 import { useEffect, useRef, useState } from 'react';
@@ -16,18 +17,18 @@ export default function PaperPage(){
  const [packaging,setPackaging]=useState(newWrapping),[postalMeta,setPostalMeta]=useState({cards:[]}),[sealing,setSealing]=useState(false),[opening,setOpening]=useState(false),[locating,setLocating]=useState(false),[cityHint,setCityHint]=useState('');
  const cityTouched=useRef(false);
  const [signedIn,setSignedIn]=useState(()=>!!accountToken());
- const [data,setData]=useState(null),[cities,setCities]=useState([]),[voices,setVoices]=useState([]),[tab,setTab]=useState('相逢'),[profile,setProfile]=useState(blank),[editing,setEditing]=useState(false);
+ const [data,setData]=useState(null),[cities,setCities]=useState([]),[cityOptions,setCityOptions]=useState([]),[voices,setVoices]=useState([]),[tab,setTab]=useState('相逢'),[profile,setProfile]=useState(blank),[editing,setEditing]=useState(false);
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState(()=>new URLSearchParams(window.location.search).get('letter')),[compose,setCompose]=useState(null),[content,setContent]=useState(''),[reader,setReader]=useState(''),[assisted,setAssisted]=useState(false);
  const [intent,setIntent]=useState(''),[mode,setMode]=useState('draft'),[tone,setTone]=useState('自然'),[suggestion,setSuggestion]=useState(''),[showAssist,setShowAssist]=useState(false),[report,setReport]=useState(''),[reporting,setReporting]=useState(false);
  const [playing,setPlaying]=useState(-1),[loadingAudio,setLoadingAudio]=useState(false),[speed,setSpeed]=useState(1),[draftKey,setDraftKey]=useState('');
  const arrived=useRef(null);
  const audio=useRef(null),audioUrl=useRef(null),generation=useRef(0),sendKey=useRef(''),busyRef=useRef(false);
  async function load(){const d=await request();const ids=d.letters.filter(l=>!l.own&&l.status==='delivered').map(l=>l.id);if(arrived.current&&ids.some(id=>!arrived.current.includes(id)))setNotice('你有一封远方来信，已经抵达。');arrived.current=ids;setData(d);return d;}
- useEffect(()=>{if(!signedIn)return;let active=true;Promise.all([request(),request('/meta')]).then(([d,m])=>{if(active){setData(d);setProfile(d.profile||blank);setEditing(!d.profile);setCities(m.cities);setPostalMeta(m);arrived.current=d.letters.filter(l=>!l.own&&l.status==='delivered').map(l=>l.id);}}).catch(e=>{if(active){setError(e.message);if(e.status===401)setSignedIn(false);}});
+ useEffect(()=>{if(!signedIn)return;let active=true;Promise.all([request(),request('/meta')]).then(([d,m])=>{if(active){setData(d);setProfile(d.profile||blank);setEditing(!d.profile);setCities(m.cities);setCityOptions(m.city_options||[]);setPostalMeta(m);arrived.current=d.letters.filter(l=>!l.own&&l.status==='delivered').map(l=>l.id);}}).catch(e=>{if(active){setError(e.message);if(e.status===401)setSignedIn(false);}});
  api.personas().then(v=>{if(active)setVoices(v.list.filter(p=>p.voice_id));}).catch(()=>{if(active)setNotice('读信人暂时无法加载，你仍然可以写信和阅读。');});
  const timer=setInterval(()=>{if(active)load().catch(()=>{});},60000);return()=>{active=false;clearInterval(timer);stop();};},[signedIn]);
  useEffect(()=>{if(!editing||data?.profile||!cities.length)return;const ctrl=new AbortController();let active=true;setLocating(true);setCityHint('正在根据网络 IP 识别城市（由 IP 城市服务提供），你也可以手动选择。');
- suggestCity(cities,AbortSignal.any([ctrl.signal,AbortSignal.timeout(7000)])).then(city=>{if(active&&!cityTouched.current){setProfile(p=>({...p,city}));setCityHint('已根据网络位置填写 '+city+'，可修改，默认不向笔友公开。'+(!cities.includes(city)?'此城市使用默认 24 小时邮程。':''));}}).catch(()=>{if(active)setCityHint('未能自动识别城市，请手动选择；留空使用 24 小时邮程。');}).finally(()=>{if(active)setLocating(false);});return()=>{active=false;ctrl.abort();};},[editing,cities.length]);
+ suggestCity(cityOptions,AbortSignal.any([ctrl.signal,AbortSignal.timeout(7000)])).then(city=>{if(active&&!cityTouched.current){setProfile(p=>({...p,city}));setCityHint('已根据网络位置填写 '+city+'，可修改，默认不向笔友公开。'+(!cities.includes(city)?'此城市使用默认 24 小时邮程。':''));}}).catch(()=>{if(active)setCityHint('未能自动识别城市，请手动选择；留空使用 24 小时邮程。');}).finally(()=>{if(active)setLocating(false);});return()=>{active=false;ctrl.abort();};},[editing,cities.length]);
  function stop(){generation.current++;audio.current?.pause();audio.current=null;if(audioUrl.current)URL.revokeObjectURL(audioUrl.current);audioUrl.current=null;setPlaying(-1);setLoadingAudio(false);}
  async function action(fn){if(busyRef.current)return;busyRef.current=true;setBusy(true);setError('');try{await fn();}catch(e){setError(e.message);}finally{busyRef.current=false;setBusy(false);}}
  function openCompose(routeId=null,incoming=null){
@@ -37,7 +38,7 @@ export default function PaperPage(){
  useEffect(()=>{if(compose&&draftKey){const draft={content,assisted,reader,wrapping:packaging,key:sendKey.current};try{localStorage.setItem(draftKey,JSON.stringify(draft));}catch{setError('浏览器无法保存草稿，请在关闭页面前复制正文。');}}},[content,assisted,reader,packaging,compose,draftKey]);
  async function locateCity(){
   if(locating)return;setLocating(true);setCityHint('正在根据网络 IP 识别城市…');
-  try{const city=await suggestCity(cities,AbortSignal.timeout(7000));if(!cityTouched.current)setProfile(p=>({...p,city}));setCityHint('网络位置建议：'+city+'。'+(!cities.includes(city)?'此城市使用默认 24 小时邮程。':'')+'可手动修改，默认不向笔友公开。');}catch(e){setCityHint(e.name==='TimeoutError'?'网络位置查询超时，请手动选择。':e.message);}finally{setLocating(false);}
+  try{const city=await suggestCity(cityOptions,AbortSignal.timeout(7000));if(!cityTouched.current)setProfile(p=>({...p,city}));setCityHint('网络位置建议：'+city+'。'+(!cities.includes(city)?'此城市使用默认 24 小时邮程。':'')+'可手动修改，默认不向笔友公开。');}catch(e){setCityHint(e.name==='TimeoutError'?'网络位置查询超时，请手动选择。':e.message);}finally{setLocating(false);}
  }
  async function checkMail(){await action(async()=>{const d=await request('/check-mail',{});await load();stop();setTab('信箱');setCompose(null);if(d.id){setSelected(d.id);setNotice(d.already_waiting?'你的信箱里已经有一封未拆的信。':'从邮筒里为你找到一封信，信在邮局等待的时间也计入邮程。');}else{setSelected(null);setNotice(d.reason);}});}
  async function unseal(){if(opening||busy)return;setOpening(true);setError('');try{await request(`/letters/${letter.id}/open`,{});if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)await new Promise(r=>setTimeout(r,650));await load();setReader(data.profile.reader||letter.reader?.id||voices[0]?.id||'');}catch(e){setError(e.message);}finally{setOpening(false);}}
@@ -63,7 +64,7 @@ export default function PaperPage(){
  {!data&&signedIn&&!error&&<p role="status">正在打开邮局…</p>}
  {editing&&<section className="paper-card"><h2>你的寄信名片</h2><p>与 Muse 共用账号，信件随账号保存。草稿保存在当前浏览器，城市默认不公开。</p><form onSubmit={e=>{e.preventDefault();action(async()=>{await request('/profile',profile);await load();setEditing(false);setNotice('名片已保存。');});}}>
  <label>笔名<input required maxLength={30} value={profile.name} onChange={e=>setProfile({...profile,name:e.target.value})}/></label>
- <label>寄信城市<select value={profile.city} onChange={e=>{cityTouched.current=true;setProfile({...profile,city:e.target.value});}}><option value="">暂不选择 · 默认 24 小时邮程</option>{profile.city&&!cities.includes(profile.city)&&<option value={profile.city}>{profile.city} · 默认 24 小时邮程</option>}{cities.map(c=><option key={c}>{c}</option>)}</select></label>
+ <CityPicker value={profile.city} options={cityOptions} onChange={city=>{cityTouched.current=true;setProfile(p=>({...p,city}));}}/>
  <button type="button" disabled={locating} onClick={()=>{cityTouched.current=false;locateCity();}}>{locating?'正在识别城市…':'↻ 根据 IP 填写城市'}</button><p className="paper-muted" role="status">{cityHint||'网络位置可能受代理影响，可手动修改。IP 查询由 IP 城市服务提供，不使用 GPS。'}</p>
  <label><input type="checkbox" checked={profile.public_city} onChange={e=>setProfile({...profile,public_city:e.target.checked})}/>向笔友公开城市名（默认只显示约数距离）</label>
  <label>通信语言<select value={profile.language} onChange={e=>setProfile({...profile,language:e.target.value})}>{['中文','English','日本語'].map(l=><option key={l}>{l}</option>)}</select></label>
