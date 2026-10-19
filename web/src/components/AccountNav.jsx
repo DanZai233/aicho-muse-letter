@@ -9,7 +9,7 @@ function Mark({ kind }) {
 
 export default function AccountNav() {
   const [user,setUser]=useState(null),[error,setError]=useState(''),[pending,setPending]=useState(false);
-  const location=useLocation(), paper=location.pathname==='/paper';
+  const location=useLocation(), paper=location.pathname==='/paper'||location.pathname.startsWith('/paper/');
   useEffect(()=>{
     let active=true;
     if(accountToken()) accountRequest('/me').then(d=>{if(active)setUser(d.user);}).catch(()=>{if(active)setUser(null);});
