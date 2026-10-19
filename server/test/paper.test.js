@@ -121,7 +121,7 @@ test('checking an empty mailbox opts a new reader into future matching without r
 });
 
 test('concurrent mailbox checks cannot claim a second daily letter until the first receives a sent reply',async t=>{
- const s=seed()[0];s.routes=[];s.letters=['a','c'].map(id=>({id:'daily-'+id,from:'test-user-'+id,content,key:'daily-'+id,sealed:true,sent_at:new Date(Date.now()-3*86400000).toISOString()}));
+ const s=seed()[0];s.profiles.filter(p=>p.id!=='test-user-b').forEach(p=>{p.paused=true;});s.routes=[];s.letters=['a','c'].map(id=>({id:'daily-'+id,from:'test-user-'+id,content,key:'daily-'+id,sealed:true,sent_at:new Date(Date.now()-3*86400000).toISOString()}));
  const app=await fixture({paper:[s]});t.after(()=>app.close());
  const call=async(path,body)=>{const r=await fetch(app.url+'/api/v1/paper'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer test-user-b'},body:body?JSON.stringify(body):undefined});return {status:r.status,...await r.json()};};
  const [a,b]=await Promise.all([call('/check-mail',{}),call('/check-mail',{})]);assert.equal(a.data.id,b.data.id);
